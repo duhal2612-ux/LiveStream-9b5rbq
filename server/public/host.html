@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>HOST — LiveStream Studio</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0f;
+      --surface:   #12121a;
+      --card:      #1a1a26;
+      --border:    #2a2a3e;
+      --primary:   #ff3b3b;
+      --primary-d: #cc2020;
+      --accent:    #ff7b00;
+      --green:     #00e676;
+      --yellow:    #ffd600;
+      --text:      #f0f0f8;
+      --muted:     #6b6b8a;
+      --radius:    12px;
+    }
+
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+    /* ── Layout ── */
+    .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; }
+    .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+
+    .status-badge {
+      padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      background: var(--card); border: 1px solid var(--border);
+    }
+    .status-badge.live { background: rgba(255,59,59,.15); border-color: var(--primary); color: var(--primary); }
+
+    main { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - 57px); overflow: hidden; }
+
+    /* ── Video Panel ── */
+    .video-panel { display: flex; flex-direction: column; padding: 20px; gap: 16px; overflow-y: auto; }
+
+    .video-wrap {
+      position: relative; border-radius: var(--radius);
+      overflow: hidden; background: #000; aspect-ratio: 16/9;
+      border: 1px solid var(--border);
+    }
+    #localVideo { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .video-overlay {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,.7); flex-direction: column; gap: 8px;
+    }
+    .video-overlay.hidden { display: none; }
+    .video-overlay p { color: var(--muted); font-size: 14px; }
+
+    .stream-meta {
+      position: absolute; top: 12px; left: 12px;
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .meta-pill {
+      background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
+      padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    }
+    .meta-pill.live-pill { color: var(--primary); border: 1px solid var(--primary); }
+    .meta-pill.id-pill { color: #fff; }
+    .meta-pill.viewer-pill { color: var(--accent); }
+
+    /* ── Controls ── */
+    .controls { display: flex; flex-direction: column; gap: 12px; }
+
+    .setup-form {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .setup-form h3 { font-size: 14px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; color: var(--muted); font-weight: 500; }
+    .field input {
+      background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; transition: border .2s;
+    }
+    .field input:focus { border-color: var(--primary); }
+
+    .btn-row { display: flex; gap: 10px; }
+
+    .btn {
+      flex: 1; padding: 12px; border-radius: 10px; border: none; font-size: 14px;
+      font-weight: 600; cursor: pointer; transition: all .2s; min-height: 44px;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-d); transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .btn-danger { background: rgba(255,59,59,.15); color: var(--primary); border: 1px solid var(--primary); }
+    .btn-danger:hover { background: rgba(255,59,59,.3); }
+    .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--muted); }
+
+    /* ── Stats ── */
+    .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px; text-align: center;
+    }
+    .stat-val { font-size: 22px; font-weight: 700; }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .stat-card.active .stat-val { color: var(--green); }
+    .stat-card.viewers .stat-val { color: var(--accent); }
+    .stat-card.stream-id .stat-val { font-size: 16px; color: var(--yellow); letter-spacing: 2px; }
+
+    /* ── Chat Panel ── */
+    .chat-panel {
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      background: var(--surface);
+      height: 100%;
+    }
+    .chat-header {
+      padding: 16px 18px; border-bottom: 1px solid var(--border);
+      font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+    }
+    .chat-header::before { content: '💬'; }
+
+    .chat-messages {
+      flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+      scroll-behavior: smooth;
+    }
+    .chat-messages::-webkit-scrollbar { width: 4px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .msg { max-width: 100%; }
+    .msg-header { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
+    .msg-name { font-size: 12px; font-weight: 700; }
+    .msg-name.host { color: var(--yellow); }
+    .msg-name.viewer { color: #fff; }
+    .msg-time { font-size: 10px; color: var(--muted); }
+    .msg-body { font-size: 14px; line-height: 1.4; word-break: break-word; }
+
+    .chat-input-area {
+      padding: 12px; border-top: 1px solid var(--border);
+      display: flex; gap: 8px;
+    }
+    .chat-input {
+      flex: 1; background: var(--card); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 14px; outline: none;
+      transition: border .2s;
+    }
+    .chat-input:focus { border-color: var(--yellow); }
+    .chat-send {
+      background: var(--yellow); color: #000; border: none; border-radius: 8px;
+      padding: 10px 16px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all .2s;
+      min-width: 44px; min-height: 44px;
+    }
+    .chat-send:hover { background: #e6c200; }
+
+    .empty-chat { text-align: center; color: var(--muted); font-size: 13px; margin: auto; padding: 20px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      .chat-panel { border-left: none; border-top: 1px solid var(--border); height: 300px; }
+      .form-row { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(3,1fr); }
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      padding: 10px 20px; border-radius: 10px; font-size: 14px;
+      opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; white-space: nowrap;
+    }
+    .toast.show { opacity: 1; }
+    .toast.success { border-color: var(--green); color: var(--green); }
+    .toast.error { border-color: var(--primary); color: var(--primary); }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <div class="logo-dot" id="liveDot" style="background:var(--muted)"></div>
+      LiveStream Studio
+    </div>
+    <div class="status-badge" id="statusBadge">OFFLINE</div>
+  </header>
+
+  <main>
+    <!-- Video + Controls -->
+    <div class="video-panel">
+      <div class="video-wrap">
+        <video id="localVideo" autoplay playsinline muted></video>
+        <div class="video-overlay" id="videoOverlay">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/></svg>
+          <p>Kamera belum aktif</p>
+        </div>
+        <div class="stream-meta" id="streamMeta" style="display:none">
+          <span class="meta-pill live-pill">● LIVE</span>
+          <span class="meta-pill id-pill" id="metaStreamId">—</span>
+          <span class="meta-pill viewer-pill" id="metaViewers">0 penonton</span>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="stat-card active">
+          <div class="stat-val" id="statStatus">OFF</div>
+          <div class="stat-label">Status</div>
+        </div>
+        <div class="stat-card viewers">
+          <div class="stat-val" id="statViewers">0</div>
+          <div class="stat-label">Penonton</div>
+        </div>
+        <div class="stat-card stream-id">
+          <div class="stat-val" id="statStreamId">—</div>
+          <div class="stat-label">Stream ID</div>
+        </div>
+      </div>
+
+      <!-- Setup Form -->
+      <div class="setup-form" id="setupForm">
+        <h3>Setup Stream</h3>
+        <div class="form-row">
+          <div class="field">
+            <label>Nama Host</label>
+            <input type="text" id="hostName" placeholder="Nama Anda" value="Host" />
+          </div>
+          <div class="field">
+            <label>Judul Stream</label>
+            <input type="text" id="streamTitle" placeholder="Judul siaran..." value="Live Streaming Saya" />
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btnCamera" onclick="startCamera()">📷 Aktifkan Kamera</button>
+          <button class="btn btn-primary" id="btnGoLive" onclick="goLive()" disabled>🔴 GO LIVE</button>
+        </div>
+        <button class="btn btn-danger" id="btnEndStream" onclick="endStream()" style="display:none">⏹ Akhiri Stream</button>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div class="chat-panel">
+      <div class="chat-header">Live Chat</div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="empty-chat">Chat akan aktif saat live dimulai</div>
+      </div>
+      <div class="chat-input-area">
+        <input type="text" class="chat-input" id="chatInput" placeholder="Tulis pesan..." maxlength="200" onkeydown="if(event.key==='Enter')sendChat()" disabled />
+        <button class="chat-send" onclick="sendChat()" id="chatSendBtn" disabled>➤</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Socket ─────────────────────────────────────────────────────────────────
+const socket = io();
+
+// ── State ──────────────────────────────────────────────────────────────────
+let localStream = null;
+let streamId = null;
+let isLive = false;
+let viewerCount = 0;
+let startTime = null;
+/** @type {Map<string, RTCPeerConnection>} viewerId → pc */
+const peerConnections = new Map();
+
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:stun.services.mozilla.com' }
+  ],
+  sdpSemantics: 'unified-plan',
+  iceCandidatePoolSize: 10
+};
+
+// ── Camera ─────────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    const constraints = {
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 }
+    };
+    localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const video = document.getElementById('localVideo');
+    video.srcObject = localStream;
+    await video.play();
+    document.getElementById('videoOverlay').classList.add('hidden');
+    document.getElementById('btnGoLive').disabled = false;
+    document.getElementById('btnCamera').textContent = '✅ Kamera Aktif';
+    document.getElementById('btnCamera').disabled = true;
+    showToast('Kamera aktif! Siap Go Live.', 'success');
+  } catch (err) {
+    console.error('[CAMERA]', err);
+    showToast('Gagal akses kamera: ' + err.message, 'error');
+  }
+}
+
+// ── Go Live ────────────────────────────────────────────────────────────────
+function goLive() {
+  if (!localStream || !localStream.active) {
+    showToast('Aktifkan kamera terlebih dahulu!', 'error');
+    return;
+  }
+  const title = document.getElementById('streamTitle').value.trim() || 'Live Stream';
+  const hostName = document.getElementById('hostName').value.trim() || 'Host';
+  socket.emit('host:register', { title, hostName });
+}
+
+// ── Create Peer for Viewer ─────────────────────────────────────────────────
+async function createPeerForViewer(viewerId, viewerName) {
+  console.log('[PEER] Creating connection for viewer', viewerId);
+  const pc = new RTCPeerConnection(ICE_CONFIG);
+  peerConnections.set(viewerId, pc);
+
+  // Add all local tracks AFTER stream is confirmed active
+  localStream.getTracks().forEach(track => {
+    console.log('[PEER] Adding track:', track.kind);
+    pc.addTrack(track, localStream);
+  });
+
+  // ICE candidates
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      socket.emit('rtc:ice', { targetId: viewerId, candidate: event.candidate });
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    console.log(`[ICE] Viewer ${viewerId}:`, pc.iceConnectionState);
+    if (pc.iceConnectionState === 'failed') {
+      console.log('[ICE] Restarting ICE for', viewerId);
+      pc.restartIce();
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    console.log(`[CONN] Viewer ${viewerId}:`, pc.connectionState);
+  };
+
+  // Create offer
+  const offer = await pc.createOffer({ offerToReceiveVideo: false, offerToReceiveAudio: false });
+  await pc.setLocalDescription(offer);
+  socket.emit('rtc:offer', { targetId: viewerId, offer: pc.localDescription });
+  console.log('[OFFER] Sent to', viewerId);
+}
+
+// ── End Stream ─────────────────────────────────────────────────────────────
+function endStream() {
+  if (!confirm('Yakin mengakhiri live stream?')) return;
+  socket.emit('host:end');
+  cleanupStream();
+}
+
+function cleanupStream() {
+  peerConnections.forEach(pc => pc.close());
+  peerConnections.clear();
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  isLive = false;
+  streamId = null;
+  updateUI(false);
+}
+
+// ── UI Update ──────────────────────────────────────────────────────────────
+function updateUI(live) {
+  document.getElementById('liveDot').style.background = live ? 'var(--primary)' : 'var(--muted)';
+  document.getElementById('statusBadge').textContent = live ? '🔴 LIVE' : 'OFFLINE';
+  document.getElementById('statusBadge').className = 'status-badge' + (live ? ' live' : '');
+  document.getElementById('statStatus').textContent = live ? 'ON' : 'OFF';
+  document.getElementById('streamMeta').style.display = live ? 'flex' : 'none';
+  document.getElementById('btnGoLive').style.display = live ? 'none' : '';
+  document.getElementById('btnEndStream').style.display = live ? '' : 'none';
+  document.getElementById('chatInput').disabled = !live;
+  document.getElementById('chatSendBtn').disabled = !live;
+  if (!live) {
+    document.getElementById('statViewers').textContent = '0';
+    document.getElementById('statStreamId').textContent = '—';
+    document.getElementById('videoOverlay').classList.remove('hidden');
+    document.getElementById('btnCamera').disabled = false;
+    document.getElementById('btnCamera').textContent = '📷 Aktifkan Kamera';
+    document.getElementById('btnGoLive').disabled = true;
+  }
+}
+
+function updateViewerCount(count) {
+  viewerCount = count;
+  document.getElementById('statViewers').textContent = count;
+  document.getElementById('metaViewers').textContent = `${count} penonton`;
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg || !streamId) return;
+  const hostName = document.getElementById('hostName').value.trim() || 'Host';
+  socket.emit('chat:send', { streamId, message: msg, name: hostName, role: 'host' });
+  input.value = '';
+}
+
+function appendChat(data) {
+  const container = document.getElementById('chatMessages');
+  const empty = container.querySelector('.empty-chat');
+  if (empty) empty.remove();
+
+  const div = document.createElement('div');
+  div.className = 'msg';
+  const t = new Date(data.ts);
+  const time = t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  div.innerHTML = `
+    <div class="msg-header">
+      <span class="msg-name ${data.role}">${escHtml(data.name)}</span>
+      <span class="msg-time">${time}</span>
+    </div>
+    <div class="msg-body">${escHtml(data.message)}</div>
+  `;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = 'toast', 3000);
+}
+
+// ── Socket Events ──────────────────────────────────────────────────────────
+socket.on('host:registered', ({ streamId: sid }) => {
+  streamId = sid;
+  isLive = true;
+  updateUI(true);
+  document.getElementById('statStreamId').textContent = sid;
+  document.getElementById('metaStreamId').textContent = `ID: ${sid}`;
+  showToast(`Stream dimulai! ID: ${sid}`, 'success');
+  console.log('[LIVE] Stream ID:', sid);
+});
+
+socket.on('viewer:joined', async ({ viewerId, viewerName }) => {
+  console.log('[VIEWER JOIN]', viewerId, viewerName);
+  showToast(`${viewerName} bergabung! 👋`, 'success');
+  await createPeerForViewer(viewerId, viewerName);
+});
+
+socket.on('viewer:left', ({ viewerId }) => {
+  const pc = peerConnections.get(viewerId);
+  if (pc) { pc.close(); peerConnections.delete(viewerId); }
+});
+
+socket.on('rtc:answer', async ({ from, answer }) => {
+  const pc = peerConnections.get(from);
+  if (!pc) return;
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    console.log('[ANSWER] Set from', from);
+  } catch (e) { console.error('[ANSWER ERROR]', e); }
+});
+
+socket.on('rtc:ice', async ({ from, candidate }) => {
+  const pc = peerConnections.get(from);
+  if (!pc) return;
+  try {
+    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (e) { console.warn('[ICE ERROR]', e.message); }
+});
+
+socket.on('viewer:count', ({ count }) => updateViewerCount(count));
+
+socket.on('chat:message', (data) => appendChat(data));
+
+socket.on('disconnect', () => {
+  showToast('Koneksi terputus. Mencoba reconnect...', 'error');
+});
+
+socket.on('connect', () => {
+  if (isLive) showToast('Terhubung kembali!', 'success');
+});
+</script>
+</body>
+</html>
