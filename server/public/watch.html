@@ -2,284 +2,369 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Tonton Live — LiveStream</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0a0a0f;
-      --surface:   #12121a;
-      --card:      #1a1a26;
-      --border:    #2a2a3e;
-      --primary:   #ff3b3b;
-      --accent:    #ff7b00;
-      --green:     #00e676;
-      --yellow:    #ffd600;
-      --text:      #f0f0f8;
-      --muted:     #6b6b8a;
-      --radius:    12px;
+      --primary: #fe2c55;
+      --accent: #25f4ee;
+      --yellow: #ffd600;
+      --green: #00e676;
+      --text: #ffffff;
+      --muted: rgba(255,255,255,0.55);
     }
 
-    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+    html, body { height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', system-ui, sans-serif; color: var(--text); }
 
-    /* ── SCREENS ── */
-    .screen { display: none; min-height: 100vh; }
+    /* ─── SCREENS ─── */
+    .screen { display: none; position: fixed; inset: 0; }
     .screen.active { display: flex; }
 
-    /* ── Discovery Screen ── */
+    /* ─── DISCOVER SCREEN ─── */
     #discoverScreen {
       flex-direction: column;
-      background: var(--bg);
+      background: linear-gradient(160deg, #0d0d14 0%, #14080e 100%);
+      overflow-y: auto;
     }
 
-    .discover-header {
-      padding: 20px; border-bottom: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: space-between;
-      background: var(--surface);
+    .disc-header {
+      padding: 16px 18px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      background: rgba(0,0,0,0.3); backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 5;
+      flex-shrink: 0;
     }
-    .logo { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-    .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+    .logo { display: flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 800; }
+    .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); animation: pulse 1.4s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }
 
     .btn-refresh {
-      background: var(--card); border: 1px solid var(--border); color: var(--text);
-      padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer;
-      display: flex; align-items: center; gap: 6px; min-height: 44px;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 38px;
+      transition: background .2s;
     }
-    .btn-refresh:hover { border-color: var(--muted); }
+    .btn-refresh:hover { background: rgba(255,255,255,0.14); }
 
-    .discover-content { flex: 1; padding: 20px; max-width: 900px; margin: 0 auto; width: 100%; }
-    .discover-content h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
-    .discover-content p { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+    .disc-body { flex: 1; padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; }
+    .disc-body h2 { font-size: 22px; font-weight: 800; }
+    .disc-sub { font-size: 14px; color: var(--muted); margin-top: -14px; }
 
-    .stream-list { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+    /* Grid layout stream cards */
+    .stream-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
 
     .stream-card {
-      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 16px 20px; cursor: pointer; transition: all .2s;
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      position: relative; border-radius: 14px; overflow: hidden;
+      aspect-ratio: 9/16; background: #111;
+      cursor: pointer; transition: transform .2s, box-shadow .2s;
+      border: 1.5px solid rgba(255,255,255,0.08);
     }
-    .stream-card:hover { border-color: var(--primary); transform: translateY(-2px); background: #1e1e2e; }
-    .stream-card:active { transform: translateY(0); }
+    .stream-card:hover { transform: scale(1.03); box-shadow: 0 8px 30px rgba(254,44,85,.3); border-color: var(--primary); }
+    .stream-card:active { transform: scale(.98); }
 
-    .stream-info { flex: 1; min-width: 0; }
-    .stream-title { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .stream-host { font-size: 13px; color: var(--muted); margin-top: 3px; }
-    .stream-badge { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-    .badge-live { background: rgba(255,59,59,.2); color: var(--primary); border: 1px solid var(--primary); padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-    .badge-viewers { font-size: 12px; color: var(--accent); }
-    .badge-id { font-size: 11px; color: var(--muted); }
-
-    .empty-streams {
-      text-align: center; padding: 60px 20px; color: var(--muted);
-      display: flex; flex-direction: column; align-items: center; gap: 12px;
+    .card-thumb {
+      width: 100%; height: 100%;
+      background: linear-gradient(135deg, #1a0a18 0%, #0a1020 100%);
+      display: flex; align-items: center; justify-content: center;
     }
-    .empty-streams svg { opacity: .3; }
+    .card-thumb svg { opacity: .2; }
+    .card-grad {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 70%;
+      background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 100%);
+    }
+    .card-live {
+      position: absolute; top: 8px; left: 8px;
+      background: var(--primary); color: #fff; font-size: 10px; font-weight: 800;
+      padding: 2px 8px; border-radius: 4px; letter-spacing: .8px;
+    }
+    .card-viewers {
+      position: absolute; top: 8px; right: 8px;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);
+      color: #fff; font-size: 11px; font-weight: 600;
+      padding: 2px 7px; border-radius: 10px;
+    }
+    .card-info {
+      position: absolute; bottom: 10px; left: 10px; right: 10px;
+    }
+    .card-title { font-size: 13px; font-weight: 700; line-height: 1.3; margin-bottom: 3px; }
+    .card-host { font-size: 11px; color: rgba(255,255,255,0.7); }
 
-    /* ── Join Modal ── */
+    .empty-disc {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 12px; padding: 60px 20px;
+      color: var(--muted); text-align: center;
+    }
+    .empty-disc svg { opacity: .25; }
+
+    /* ─── JOIN MODAL ─── */
     .modal-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 100;
-      display: flex; align-items: center; justify-content: center; padding: 20px;
+      position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
+      z-index: 100; display: flex; align-items: flex-end; justify-content: center;
+      padding: 0;
     }
     .modal-overlay.hidden { display: none; }
     .modal {
-      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 24px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 16px;
+      background: #1a1a26; border-radius: 24px 24px 0 0;
+      padding: 24px 24px 36px; width: 100%; max-width: 480px;
+      display: flex; flex-direction: column; gap: 18px;
+      animation: slideUp .25s ease;
     }
-    .modal h3 { font-size: 18px; font-weight: 700; }
-    .modal p { font-size: 14px; color: var(--muted); }
+    @keyframes slideUp { from { transform: translateY(60px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+    .modal-handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 0 auto -6px; }
+    .modal h3 { font-size: 18px; font-weight: 800; text-align: center; }
+    .modal .modal-desc { font-size: 14px; color: var(--muted); text-align: center; margin-top: -10px; }
 
-    .field { display: flex; flex-direction: column; gap: 6px; }
-    .field label { font-size: 12px; color: var(--muted); font-weight: 500; }
+    .field label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 7px; }
     .field input {
-      background: var(--surface); border: 1px solid var(--border); color: var(--text);
-      border-radius: 8px; padding: 11px 14px; font-size: 14px; outline: none; transition: border .2s;
+      width: 100%; background: rgba(255,255,255,0.07); border: 1.5px solid rgba(255,255,255,0.12);
+      color: #fff; border-radius: 12px; padding: 13px 16px; font-size: 15px; outline: none;
+      transition: border-color .2s;
     }
     .field input:focus { border-color: var(--primary); }
+    .field input::placeholder { color: rgba(255,255,255,0.3); }
 
     .modal-btns { display: flex; gap: 10px; }
-    .btn {
-      flex: 1; padding: 12px; border-radius: 10px; border: none; font-size: 14px;
-      font-weight: 600; cursor: pointer; transition: all .2s; min-height: 44px;
-    }
-    .btn-primary { background: var(--primary); color: #fff; }
-    .btn-primary:hover { background: #cc2020; }
-    .btn-cancel { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+    .btn { flex: 1; padding: 14px; border-radius: 12px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 50px; transition: all .2s; }
+    .btn-watch { background: var(--primary); color: #fff; }
+    .btn-watch:hover { background: #c9003c; }
+    .btn-cancel { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
 
-    /* ── Watch Screen ── */
+    /* ─── WATCH SCREEN ─── */
     #watchScreen {
-      flex-direction: column;
       background: #000;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
     }
 
-    .watch-layout { display: grid; grid-template-columns: 1fr 320px; height: 100vh; }
-
-    /* Video Side */
-    .video-side { display: flex; flex-direction: column; }
-
-    .video-wrap {
-      position: relative; flex: 1; background: #000; overflow: hidden;
+    /* Full-screen vertical video container */
+    .watch-container {
+      position: relative; width: 100%; height: 100%;
+      max-width: calc(100vh * 9 / 16);
+      overflow: hidden; background: #000;
     }
 
     #remoteVideo {
-      width: 100%; height: 100%; object-fit: contain; display: block;
-      background: #000;
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; display: block; background: #000;
     }
 
-    /* ── OVERLAY: Force Play Button (WAJIB) ── */
-    #playOverlay {
-      position: absolute; inset: 0;
-      background: rgba(0,0,0,.85); backdrop-filter: blur(4px);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 16px; cursor: pointer; z-index: 10;
-      transition: opacity .3s;
+    /* Gradient overlays */
+    .w-grad-top {
+      position: absolute; top: 0; left: 0; right: 0; height: 160px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+      pointer-events: none; z-index: 2;
     }
-    #playOverlay.hidden { display: none; }
-    .play-icon {
-      width: 80px; height: 80px; background: rgba(255,59,59,.2);
-      border: 2px solid var(--primary); border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      transition: all .2s;
+    .w-grad-bottom {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 60%;
+      background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.4) 50%, transparent 100%);
+      pointer-events: none; z-index: 2;
     }
-    #playOverlay:hover .play-icon { background: rgba(255,59,59,.4); transform: scale(1.1); }
-    .play-icon svg { margin-left: 4px; }
-    .play-label { font-size: 16px; font-weight: 700; color: #fff; }
-    .play-sub { font-size: 13px; color: var(--muted); }
 
     /* Loading overlay */
     #loadingOverlay {
-      position: absolute; inset: 0;
-      background: #000;
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-      z-index: 9;
+      position: absolute; inset: 0; background: #000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 20;
     }
     #loadingOverlay.hidden { display: none; }
-    .spinner {
-      width: 48px; height: 48px; border: 3px solid var(--border);
-      border-top-color: var(--primary); border-radius: 50%;
-      animation: spin .8s linear infinite;
-    }
+    .spinner { width: 44px; height: 44px; border: 3px solid rgba(255,255,255,.1); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-text { color: var(--muted); font-size: 14px; }
 
-    /* Stream Info Bar */
-    .stream-info-bar {
-      background: var(--surface); border-top: 1px solid var(--border);
-      padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;
-    }
-    .sib-left { display: flex; flex-direction: column; gap: 2px; }
-    .sib-title { font-size: 15px; font-weight: 600; }
-    .sib-host { font-size: 12px; color: var(--muted); }
-    .sib-right { display: flex; align-items: center; gap: 12px; }
-    .viewer-count { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--accent); }
-    .btn-leave {
-      background: transparent; border: 1px solid var(--border); color: var(--muted);
-      padding: 7px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: all .2s;
-      min-height: 36px;
-    }
-    .btn-leave:hover { border-color: var(--primary); color: var(--primary); }
-
-    /* ── Chat Side ── */
-    .chat-side {
-      border-left: 1px solid var(--border);
-      display: flex; flex-direction: column;
-      background: var(--surface);
-    }
-    .chat-header {
-      padding: 14px 16px; border-bottom: 1px solid var(--border);
-      font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;
-    }
-    .chat-messages {
-      flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px;
-      scroll-behavior: smooth;
-    }
-    .chat-messages::-webkit-scrollbar { width: 4px; }
-    .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-    .msg-name.host { color: var(--yellow); }
-    .msg-name.viewer { color: #fff; }
-    .msg-header { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
-    .msg-name { font-size: 12px; font-weight: 700; }
-    .msg-time { font-size: 10px; color: var(--muted); }
-    .msg-body { font-size: 14px; line-height: 1.4; word-break: break-word; }
-
-    .chat-input-area {
-      padding: 10px; border-top: 1px solid var(--border);
-      display: flex; gap: 8px;
-    }
-    .chat-input {
-      flex: 1; background: var(--card); border: 1px solid var(--border);
-      color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 14px; outline: none;
-      transition: border .2s;
-    }
-    .chat-input:focus { border-color: #fff; }
-    .chat-send {
-      background: #fff; color: #000; border: none; border-radius: 8px;
-      padding: 10px 14px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all .2s;
-      min-width: 44px; min-height: 44px;
-    }
-    .chat-send:hover { background: #e0e0e0; }
-
-    /* Stream Ended */
-    #endedOverlay {
-      position: absolute; inset: 0; background: rgba(0,0,0,.9);
+    /* Force Play Overlay */
+    #playOverlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px);
       display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-      z-index: 20;
+      cursor: pointer; z-index: 15;
+    }
+    #playOverlay.hidden { display: none; }
+    .play-ring {
+      width: 84px; height: 84px; border-radius: 50%;
+      border: 2.5px solid var(--primary); background: rgba(254,44,85,0.15);
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .2s, background .2s;
+    }
+    #playOverlay:hover .play-ring { transform: scale(1.08); background: rgba(254,44,85,0.3); }
+    .play-ring svg { margin-left: 4px; }
+    .play-label { font-size: 16px; font-weight: 800; }
+    .play-sub { font-size: 13px; color: var(--muted); }
+
+    /* Stream Ended Overlay */
+    #endedOverlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.92);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 25;
     }
     #endedOverlay.hidden { display: none; }
-    .ended-icon { font-size: 48px; }
+    .ended-emoji { font-size: 52px; }
+    .btn-back-live { background: var(--primary); color: #fff; border: none; padding: 13px 28px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; }
+
+    /* Top bar */
+    .w-top-bar {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+      padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .w-top-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .host-ava {
+      width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 800; border: 2px solid #fff;
+    }
+    .w-host-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .w-host-name { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .w-live-badge { background: var(--primary); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; width: fit-content; }
+    .w-viewer-pill {
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+    }
+    .btn-close {
+      background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
+      border: 1.5px solid rgba(255,255,255,0.2); color: #fff;
+      width: 36px; height: 36px; border-radius: 50%; font-size: 18px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background .2s; flex-shrink: 0;
+    }
+    .btn-close:hover { background: rgba(254,44,85,.5); }
+
+    /* Stream info bottom */
+    .w-stream-info {
+      position: absolute; bottom: 170px; left: 14px; right: 72px; z-index: 10;
+    }
+    .w-stream-title { font-size: 14px; font-weight: 700; margin-bottom: 3px; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
+    .w-stream-host { font-size: 12px; color: rgba(255,255,255,0.75); }
+
+    /* Right action bar (TikTok style) */
+    .w-right-bar {
+      position: absolute; right: 10px; bottom: 180px; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; gap: 22px;
+    }
+    .w-action-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;
+    }
+    .w-action-icon {
+      width: 50px; height: 50px; border-radius: 50%;
+      background: rgba(255,255,255,0.15); backdrop-filter: blur(8px);
+      border: 1.5px solid rgba(255,255,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; transition: transform .15s;
+    }
+    .w-action-btn:active .w-action-icon { transform: scale(.88); }
+    .w-action-label { font-size: 10px; color: rgba(255,255,255,0.8); font-weight: 500; }
+
+    /* Heart animation */
+    .heart-anim {
+      position: absolute; bottom: 200px; right: 22px; z-index: 11;
+      pointer-events: none;
+    }
+    .heart-float {
+      position: absolute; font-size: 20px; animation: floatHeart 1.2s ease forwards;
+    }
+    @keyframes floatHeart {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-80px) scale(1.4); }
+    }
+
+    /* Chat overlay (TikTok style) */
+    .w-chat-area {
+      position: absolute; bottom: 92px; left: 0; right: 68px; z-index: 10;
+      max-height: 220px; overflow: hidden;
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 30%);
+      mask-image: linear-gradient(to bottom, transparent 0%, black 30%);
+    }
+    .w-chat-scroll {
+      overflow-y: auto; padding: 0 12px 4px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .w-chat-scroll::-webkit-scrollbar { display: none; }
+
+    .w-msg {
+      display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px;
+      background: rgba(0,0,0,0.38); backdrop-filter: blur(6px);
+      border-radius: 20px; padding: 6px 12px;
+      max-width: fit-content;
+      animation: msgPop .2s ease;
+    }
+    @keyframes msgPop { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .w-msg .cn { font-size: 13px; font-weight: 700; margin-right: 2px; }
+    .w-msg .cn.host { color: var(--yellow); }
+    .w-msg .cn.viewer { color: var(--accent); }
+    .w-msg .ct { font-size: 13px; color: #fff; word-break: break-word; }
+
+    /* Chat input bar */
+    .w-chat-bar {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+      padding: 8px 12px 20px;
+      display: flex; gap: 8px; align-items: center;
+      background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);
+    }
+    .w-chat-input {
+      flex: 1; background: rgba(255,255,255,0.12); backdrop-filter: blur(8px);
+      border: 1.5px solid rgba(255,255,255,0.2); color: #fff;
+      border-radius: 24px; padding: 10px 16px; font-size: 14px; outline: none;
+      transition: border-color .2s; min-height: 44px;
+    }
+    .w-chat-input:focus { border-color: rgba(255,255,255,0.5); }
+    .w-chat-input::placeholder { color: rgba(255,255,255,0.4); }
+    .w-send-btn {
+      width: 44px; height: 44px; border-radius: 50%; border: none;
+      background: var(--primary); color: #fff; font-size: 18px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: transform .15s; flex-shrink: 0;
+    }
+    .w-send-btn:hover { transform: scale(1.1); }
 
     /* ── Toast ── */
     .toast {
-      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-      background: var(--card); border: 1px solid var(--border); color: var(--text);
-      padding: 10px 20px; border-radius: 10px; font-size: 14px;
-      opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; white-space: nowrap;
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,.85); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.15); color: #fff;
+      padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 500;
+      opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999;
+      white-space: nowrap;
     }
     .toast.show { opacity: 1; }
     .toast.success { border-color: var(--green); color: var(--green); }
     .toast.error { border-color: var(--primary); color: var(--primary); }
-
-    /* ── Responsive ── */
-    @media (max-width: 768px) {
-      .watch-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-      .video-side { height: 55vw; }
-      .video-wrap { height: 100%; }
-      .chat-side { border-left: none; border-top: 1px solid var(--border); }
-      #watchScreen { overflow: hidden; }
-      .watch-layout { height: 100vh; overflow: hidden; }
-    }
   </style>
 </head>
 <body>
 
-<!-- ─── DISCOVER SCREEN ─────────────────────────────────────────────────── -->
+<!-- ─── DISCOVER SCREEN ────────────────────────────────────────────────── -->
 <div class="screen active" id="discoverScreen">
-  <div class="discover-header">
+
+  <div class="disc-header">
     <div class="logo">
       <div class="logo-dot"></div>
       LiveStream
     </div>
     <button class="btn-refresh" onclick="loadStreams()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
       </svg>
       Refresh
     </button>
   </div>
 
-  <div class="discover-content">
-    <h2>Live Sekarang</h2>
-    <p>Pilih stream yang ingin ditonton</p>
-    <div class="stream-list" id="streamList">
-      <div class="empty-streams">
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5">
+  <div class="disc-body">
+    <h2>Live Sekarang 🔴</h2>
+    <p class="disc-sub">Pilih stream untuk ditonton</p>
+
+    <div class="stream-grid" id="streamGrid">
+      <div class="empty-disc" style="grid-column:1/-1">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5">
           <path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/>
         </svg>
         <p>Belum ada stream aktif</p>
-        <small style="color:var(--muted);font-size:12px">Klik Refresh untuk memperbarui</small>
+        <small style="font-size:12px">Klik Refresh untuk memperbarui</small>
       </div>
     </div>
   </div>
@@ -288,105 +373,124 @@
 <!-- ─── JOIN MODAL ─────────────────────────────────────────────────────── -->
 <div class="modal-overlay hidden" id="joinModal">
   <div class="modal">
-    <h3>Bergabung ke Stream</h3>
-    <p id="joinModalDesc">Masukkan nama Anda untuk bergabung</p>
+    <div class="modal-handle"></div>
+    <h3>Bergabung ke Stream 🎬</h3>
+    <p class="modal-desc" id="joinModalDesc">Masukkan nama untuk bergabung</p>
     <div class="field">
-      <label>Nama Anda</label>
+      <label>Nama kamu</label>
       <input type="text" id="viewerNameInput" placeholder="Nama penonton..." maxlength="30"
              onkeydown="if(event.key==='Enter')confirmJoin()" />
     </div>
     <div class="modal-btns">
       <button class="btn btn-cancel" onclick="closeJoinModal()">Batal</button>
-      <button class="btn btn-primary" onclick="confirmJoin()">🎬 Tonton</button>
+      <button class="btn btn-watch" onclick="confirmJoin()">Tonton Sekarang</button>
     </div>
   </div>
 </div>
 
-<!-- ─── WATCH SCREEN ────────────────────────────────────────────────────── -->
+<!-- ─── WATCH SCREEN ──────────────────────────────────────────────────── -->
 <div class="screen" id="watchScreen">
-  <div class="watch-layout">
+  <div class="watch-container">
 
-    <!-- Video Side -->
-    <div class="video-side">
-      <div class="video-wrap">
-        <!-- Video Element: autoplay + playsinline + muted untuk HP -->
-        <video id="remoteVideo" autoplay playsinline muted></video>
+    <!-- Video -->
+    <video id="remoteVideo" autoplay playsinline muted></video>
 
-        <!-- Loading Overlay -->
-        <div id="loadingOverlay">
-          <div class="spinner"></div>
-          <div class="loading-text">Menghubungkan ke stream...</div>
-        </div>
+    <!-- Gradients -->
+    <div class="w-grad-top"></div>
+    <div class="w-grad-bottom"></div>
 
-        <!-- Force Play Overlay (WAJIB - anti black screen HP) -->
-        <div id="playOverlay" class="hidden" onclick="forcePlay()">
-          <div class="play-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="var(--primary)">
-              <polygon points="5,3 19,12 5,21"/>
-            </svg>
-          </div>
-          <div class="play-label">KLIK UNTUK AKTIFKAN LIVE</div>
-          <div class="play-sub">Browser memerlukan interaksi untuk memutar video</div>
-        </div>
+    <!-- Loading -->
+    <div id="loadingOverlay">
+      <div class="spinner"></div>
+      <div class="loading-text">Menghubungkan ke stream...</div>
+    </div>
 
-        <!-- Stream Ended Overlay -->
-        <div id="endedOverlay" class="hidden">
-          <div class="ended-icon">📵</div>
-          <h3 style="font-size:20px">Stream Telah Berakhir</h3>
-          <p style="color:var(--muted);font-size:14px">Host telah mengakhiri siaran ini.</p>
-          <button class="btn btn-primary" style="max-width:200px" onclick="backToDiscover()">Lihat Stream Lain</button>
+    <!-- Force Play -->
+    <div id="playOverlay" class="hidden" onclick="forcePlay()">
+      <div class="play-ring">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="var(--primary)"><polygon points="5,3 19,12 5,21"/></svg>
+      </div>
+      <div class="play-label">KLIK UNTUK AKTIFKAN LIVE</div>
+      <div class="play-sub">Tap untuk memutar video</div>
+    </div>
+
+    <!-- Stream Ended -->
+    <div id="endedOverlay" class="hidden">
+      <div class="ended-emoji">📵</div>
+      <h3 style="font-size:20px;font-weight:800">Stream Berakhir</h3>
+      <p style="color:rgba(255,255,255,0.6);font-size:14px">Host telah mengakhiri siaran.</p>
+      <button class="btn-back-live" onclick="backToDiscover()">Lihat Stream Lain</button>
+    </div>
+
+    <!-- Top bar -->
+    <div class="w-top-bar">
+      <div class="w-top-left">
+        <div class="host-ava" id="watchHostAva">H</div>
+        <div class="w-host-info">
+          <div class="w-host-name" id="watchHostName">—</div>
+          <div class="w-live-badge">● LIVE</div>
         </div>
       </div>
-
-      <!-- Stream Info Bar -->
-      <div class="stream-info-bar">
-        <div class="sib-left">
-          <div class="sib-title" id="watchTitle">—</div>
-          <div class="sib-host" id="watchHost">—</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="w-viewer-pill">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+          <span id="watchViewers">0</span>
         </div>
-        <div class="sib-right">
-          <div class="viewer-count">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
-            </svg>
-            <span id="watchViewers">0</span>
-          </div>
-          <button class="btn-leave" onclick="backToDiscover()">⬅ Kembali</button>
-        </div>
+        <button class="btn-close" onclick="backToDiscover()">✕</button>
       </div>
     </div>
 
-    <!-- Chat Side -->
-    <div class="chat-side">
-      <div class="chat-header">💬 Live Chat</div>
-      <div class="chat-messages" id="chatMessages">
-        <div style="text-align:center;color:var(--muted);font-size:13px;padding:20px;">Bergabung dan mulai chat!</div>
+    <!-- Stream info -->
+    <div class="w-stream-info">
+      <div class="w-stream-title" id="watchTitle">—</div>
+      <div class="w-stream-host" id="watchSubHost">—</div>
+    </div>
+
+    <!-- Right action bar -->
+    <div class="w-right-bar">
+      <div class="w-action-btn" onclick="sendHeart()">
+        <div class="w-action-icon" id="heartBtn">❤️</div>
+        <span class="w-action-label" id="heartCount">0</span>
       </div>
-      <div class="chat-input-area">
-        <input type="text" class="chat-input" id="chatInput" placeholder="Tulis pesan..." maxlength="200"
-               onkeydown="if(event.key==='Enter')sendChat()" />
-        <button class="chat-send" onclick="sendChat()">➤</button>
+      <div class="w-action-btn" onclick="focusChat()">
+        <div class="w-action-icon">💬</div>
+        <span class="w-action-label">Chat</span>
       </div>
     </div>
+
+    <!-- Heart animation container -->
+    <div class="heart-anim" id="heartAnim"></div>
+
+    <!-- Chat overlay -->
+    <div class="w-chat-area">
+      <div class="w-chat-scroll" id="wChatScroll">
+        <div class="w-msg"><span class="ct" style="color:rgba(255,255,255,0.5)">Bergabung dan mulai chat! 👋</span></div>
+      </div>
+    </div>
+
+    <!-- Chat input bar -->
+    <div class="w-chat-bar">
+      <input type="text" class="w-chat-input" id="wChatInput" placeholder="Tulis pesan..." maxlength="200"
+             onkeydown="if(event.key==='Enter')sendChat()" />
+      <button class="w-send-btn" onclick="sendChat()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-// ── Socket ─────────────────────────────────────────────────────────────────
-// Otomatis deteksi URL (bekerja dengan Ngrok HTTPS)
 const socket = io();
 
-// ── State ──────────────────────────────────────────────────────────────────
 let currentStreamId = null;
-let currentStreamData = null;
 let myName = 'Penonton';
 let hostSocketId = null;
-/** @type {RTCPeerConnection|null} */
 let pc = null;
 let videoUnlocked = false;
+let heartTotal = 0;
 
 const ICE_CONFIG = {
   iceServers: [
@@ -402,118 +506,101 @@ const ICE_CONFIG = {
   iceCandidatePoolSize: 10
 };
 
-// ── Stream Discovery ───────────────────────────────────────────────────────
-function loadStreams() {
-  socket.emit('get:streams');
-}
+// ── Discovery ──────────────────────────────────────────────────────────────
+function loadStreams() { socket.emit('get:streams'); }
 
 function renderStreams(list) {
-  const container = document.getElementById('streamList');
+  const grid = document.getElementById('streamGrid');
   if (!list.length) {
-    container.innerHTML = `
-      <div class="empty-streams">
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5">
+    grid.innerHTML = `
+      <div class="empty-disc" style="grid-column:1/-1">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5">
           <path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/>
         </svg>
         <p>Belum ada stream aktif</p>
-        <small style="color:var(--muted);font-size:12px">Klik Refresh untuk memperbarui</small>
+        <small style="font-size:12px">Klik Refresh untuk memperbarui</small>
       </div>`;
     return;
   }
-
-  container.innerHTML = '';
+  grid.innerHTML = '';
   list.forEach(s => {
-    const ago = formatAgo(s.startedAt);
     const card = document.createElement('div');
     card.className = 'stream-card';
     card.innerHTML = `
-      <div class="stream-info">
-        <div class="stream-title">${escHtml(s.title)}</div>
-        <div class="stream-host">oleh ${escHtml(s.hostName)} · ${ago}</div>
+      <div class="card-thumb">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5">
+          <path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/>
+        </svg>
       </div>
-      <div class="stream-badge">
-        <span class="badge-live">● LIVE</span>
-        <span class="badge-viewers">👁 ${s.viewerCount} penonton</span>
-        <span class="badge-id">ID: ${s.streamId}</span>
+      <div class="card-grad"></div>
+      <div class="card-live">LIVE</div>
+      <div class="card-viewers">👁 ${s.viewerCount}</div>
+      <div class="card-info">
+        <div class="card-title">${escHtml(s.title)}</div>
+        <div class="card-host">@${escHtml(s.hostName)}</div>
       </div>
     `;
     card.onclick = () => openJoinModal(s);
-    container.appendChild(card);
+    grid.appendChild(card);
   });
 }
 
 function formatAgo(ts) {
-  const secs = Math.floor((Date.now() - ts) / 1000);
-  if (secs < 60) return `${secs}d lalu`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m lalu`;
-  return `${Math.floor(mins / 60)}j lalu`;
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return s + 'd lalu';
+  const m = Math.floor(s / 60);
+  return m < 60 ? m + 'm lalu' : Math.floor(m / 60) + 'j lalu';
 }
 
 // ── Join Modal ─────────────────────────────────────────────────────────────
-let pendingStreamData = null;
-
-function openJoinModal(streamData) {
-  pendingStreamData = streamData;
-  document.getElementById('joinModalDesc').textContent = `"${streamData.title}" oleh ${streamData.hostName}`;
+let pendingStream = null;
+function openJoinModal(data) {
+  pendingStream = data;
+  document.getElementById('joinModalDesc').textContent = '"' + data.title + '" oleh ' + data.hostName;
   document.getElementById('joinModal').classList.remove('hidden');
-  setTimeout(() => document.getElementById('viewerNameInput').focus(), 100);
+  setTimeout(() => document.getElementById('viewerNameInput').focus(), 150);
 }
-
 function closeJoinModal() {
   document.getElementById('joinModal').classList.add('hidden');
-  pendingStreamData = null;
+  pendingStream = null;
 }
-
 function confirmJoin() {
   const name = document.getElementById('viewerNameInput').value.trim();
-  if (!name) {
-    document.getElementById('viewerNameInput').focus();
-    return;
-  }
+  if (!name) { document.getElementById('viewerNameInput').focus(); return; }
   myName = name;
-  joinStream(pendingStreamData);
+  joinStream(pendingStream);
   closeJoinModal();
 }
 
 // ── Join Stream ────────────────────────────────────────────────────────────
-function joinStream(streamData) {
-  currentStreamId = streamData.streamId;
-  currentStreamData = streamData;
-
-  // Update watch screen info
-  document.getElementById('watchTitle').textContent = streamData.title;
-  document.getElementById('watchHost').textContent = 'oleh ' + streamData.hostName;
-  document.getElementById('watchViewers').textContent = streamData.viewerCount;
-
+function joinStream(data) {
+  currentStreamId = data.streamId;
+  // Update UI
+  document.getElementById('watchTitle').textContent = data.title;
+  document.getElementById('watchHostName').textContent = data.hostName;
+  document.getElementById('watchSubHost').textContent = 'oleh ' + data.hostName;
+  document.getElementById('watchHostAva').textContent = data.hostName.charAt(0).toUpperCase();
+  document.getElementById('watchViewers').textContent = data.viewerCount;
+  // Reset states
+  heartTotal = 0;
+  document.getElementById('heartCount').textContent = '0';
+  document.getElementById('wChatScroll').innerHTML = '<div class="w-msg"><span class="ct" style="color:rgba(255,255,255,0.5)">Bergabung dan mulai chat! 👋</span></div>';
   // Switch screen
   showScreen('watchScreen');
-
-  // Show loading
   document.getElementById('loadingOverlay').classList.remove('hidden');
   document.getElementById('playOverlay').classList.add('hidden');
   document.getElementById('endedOverlay').classList.add('hidden');
-
-  // Notify server
   socket.emit('viewer:join', { streamId: currentStreamId, viewerName: myName });
-  console.log('[JOIN] Stream:', currentStreamId);
 }
 
-// ── WebRTC: Receive Offer ──────────────────────────────────────────────────
+// ── WebRTC ─────────────────────────────────────────────────────────────────
 async function handleOffer(fromId, offer) {
-  console.log('[OFFER] Received from', fromId);
   hostSocketId = fromId;
-
-  // Cleanup previous
   if (pc) { pc.close(); pc = null; }
-
   pc = new RTCPeerConnection(ICE_CONFIG);
 
-  // ── Stream Event: WAJIB untuk anti-black screen ──────────────────────────
   pc.ontrack = (event) => {
-    console.log('[TRACK] Received:', event.track.kind);
     const video = document.getElementById('remoteVideo');
-
     if (event.streams && event.streams[0]) {
       video.srcObject = event.streams[0];
     } else {
@@ -521,47 +608,26 @@ async function handleOffer(fromId, offer) {
       ms.addTrack(event.track);
       video.srcObject = ms;
     }
-
-    // Hide loading
     document.getElementById('loadingOverlay').classList.add('hidden');
-
-    // Attempt auto-play
     video.play().then(() => {
-      console.log('[VIDEO] Autoplay success');
       videoUnlocked = true;
-      document.getElementById('playOverlay').classList.add('hidden');
-      // Unmute jika berhasil
       video.muted = false;
-    }).catch(err => {
-      console.warn('[VIDEO] Autoplay blocked:', err.message);
-      // Tampilkan tombol force play karena browser HP blokir autoplay
+      document.getElementById('playOverlay').classList.add('hidden');
+    }).catch(() => {
       document.getElementById('playOverlay').classList.remove('hidden');
     });
   };
 
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit('rtc:ice', { targetId: fromId, candidate: event.candidate });
-    }
+  pc.onicecandidate = (e) => {
+    if (e.candidate) socket.emit('rtc:ice', { targetId: fromId, candidate: e.candidate });
   };
 
   pc.oniceconnectionstatechange = () => {
-    console.log('[ICE] State:', pc.iceConnectionState);
-    if (pc.iceConnectionState === 'failed') {
-      console.log('[ICE] Restarting...');
-      pc.restartIce();
-    }
-    if (pc.iceConnectionState === 'disconnected') {
-      showToast('Koneksi tidak stabil...', 'error');
-    }
+    if (pc.iceConnectionState === 'failed') pc.restartIce();
+    if (pc.iceConnectionState === 'disconnected') showToast('Koneksi tidak stabil...', 'error');
     if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
       document.getElementById('loadingOverlay').classList.add('hidden');
-      showToast('Terhubung ke stream!', 'success');
     }
-  };
-
-  pc.onconnectionstatechange = () => {
-    console.log('[CONN]', pc.connectionState);
   };
 
   try {
@@ -569,70 +635,73 @@ async function handleOffer(fromId, offer) {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socket.emit('rtc:answer', { targetId: fromId, answer: pc.localDescription });
-    console.log('[ANSWER] Sent');
-  } catch (e) {
-    console.error('[OFFER/ANSWER ERROR]', e);
-    showToast('Gagal setup koneksi WebRTC', 'error');
-  }
+  } catch(e) { console.error('[OFFER/ANSWER]', e); showToast('Gagal koneksi WebRTC', 'error'); }
 }
 
-// ── Force Play (Anti Black Screen - WAJIB untuk HP) ────────────────────────
 function forcePlay() {
   const video = document.getElementById('remoteVideo');
-  video.muted = false; // Aktifkan suara setelah interaksi
+  video.muted = false;
   video.play().then(() => {
-    console.log('[FORCE PLAY] Success');
     videoUnlocked = true;
     document.getElementById('playOverlay').classList.add('hidden');
-  }).catch(err => {
-    console.error('[FORCE PLAY] Error:', err);
-    // Coba lagi dengan muted
+  }).catch(() => {
     video.muted = true;
     video.play().then(() => {
       document.getElementById('playOverlay').classList.add('hidden');
-      showToast('Video aktif (suara dinonaktifkan browser)', 'error');
+      showToast('Video aktif (suara mute)', 'error');
     });
   });
 }
 
-// ── Back to Discover ───────────────────────────────────────────────────────
 function backToDiscover() {
   if (pc) { pc.close(); pc = null; }
-  const video = document.getElementById('remoteVideo');
-  video.srcObject = null;
-  currentStreamId = null;
-  videoUnlocked = false;
+  document.getElementById('remoteVideo').srcObject = null;
+  currentStreamId = null; videoUnlocked = false;
   showScreen('discoverScreen');
   loadStreams();
 }
 
 // ── Chat ───────────────────────────────────────────────────────────────────
 function sendChat() {
-  const input = document.getElementById('chatInput');
+  const input = document.getElementById('wChatInput');
   const msg = input.value.trim();
   if (!msg || !currentStreamId) return;
   socket.emit('chat:send', { streamId: currentStreamId, message: msg, name: myName, role: 'viewer' });
   input.value = '';
 }
 
-function appendChat(data) {
-  const container = document.getElementById('chatMessages');
-  const first = container.firstElementChild;
-  if (first && first.style.textAlign === 'center') first.remove();
+function focusChat() { document.getElementById('wChatInput').focus(); }
 
+// ── FIX: Listener chat:message di sisi penonton ────────────────────────────
+function appendChat(data) {
+  const scroll = document.getElementById('wChatScroll');
   const div = document.createElement('div');
-  div.className = 'msg';
-  const t = new Date(data.ts);
-  const time = t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-  div.innerHTML = `
-    <div class="msg-header">
-      <span class="msg-name ${data.role}">${escHtml(data.name)}</span>
-      <span class="msg-time">${time}</span>
-    </div>
-    <div class="msg-body">${escHtml(data.message)}</div>
-  `;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
+  div.className = 'w-msg';
+  div.innerHTML = `<span class="cn ${data.role}">${escHtml(data.name)}</span><span class="ct">${escHtml(data.message)}</span>`;
+  scroll.appendChild(div);
+  while (scroll.children.length > 60) scroll.removeChild(scroll.firstChild);
+  scroll.scrollTop = scroll.scrollHeight;
+}
+
+// ── Heart ──────────────────────────────────────────────────────────────────
+function sendHeart() {
+  heartTotal++;
+  document.getElementById('heartCount').textContent = heartTotal;
+  spawnHeart();
+  // Send as chat notification
+  if (currentStreamId) {
+    socket.emit('chat:send', { streamId: currentStreamId, message: '❤️ mengirim hati!', name: myName, role: 'viewer' });
+  }
+}
+
+function spawnHeart() {
+  const container = document.getElementById('heartAnim');
+  const h = document.createElement('div');
+  h.className = 'heart-float';
+  h.textContent = ['❤️','🧡','💛','💜','💙'][Math.floor(Math.random()*5)];
+  h.style.right = (Math.random() * 10) + 'px';
+  container.appendChild(h);
+  setTimeout(() => h.remove(), 1300);
 }
 
 // ── Utils ──────────────────────────────────────────────────────────────────
@@ -640,18 +709,14 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
-
-function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-
 let toastTimer;
 function showToast(msg, type = '') {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show' + (type ? ' ' + type : '');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.className = 'toast', 3000);
+  t.textContent = msg; t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = 'toast', 3000);
 }
 
 // ── Socket Events ──────────────────────────────────────────────────────────
@@ -661,20 +726,17 @@ socket.on('rtc:offer', ({ from, offer }) => handleOffer(from, offer));
 
 socket.on('rtc:ice', async ({ from, candidate }) => {
   if (!pc) return;
-  try {
-    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    console.log('[ICE] Added from', from);
-  } catch (e) {
-    console.warn('[ICE ADD]', e.message);
-  }
+  try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
 });
 
 socket.on('viewer:count', ({ count }) => {
   document.getElementById('watchViewers').textContent = count;
 });
 
+// ── FIX: Chat dari host dan penonton lain tampil di layar penonton ──────────
+socket.on('chat:message', (data) => appendChat(data));
+
 socket.on('stream:ended', () => {
-  console.log('[STREAM] Ended by host');
   document.getElementById('loadingOverlay').classList.add('hidden');
   document.getElementById('playOverlay').classList.add('hidden');
   document.getElementById('endedOverlay').classList.remove('hidden');
@@ -686,23 +748,13 @@ socket.on('error:stream', ({ message }) => {
   backToDiscover();
 });
 
-socket.on('connect', () => {
-  console.log('[SOCKET] Connected');
-  loadStreams();
-});
-
-socket.on('disconnect', () => {
-  showToast('Koneksi terputus...', 'error');
-});
+socket.on('connect', () => loadStreams());
+socket.on('disconnect', () => showToast('Koneksi terputus...', 'error'));
 
 // ── Init ───────────────────────────────────────────────────────────────────
 loadStreams();
-
-// Auto-refresh stream list setiap 10 detik di discover screen
 setInterval(() => {
-  if (document.getElementById('discoverScreen').classList.contains('active')) {
-    loadStreams();
-  }
+  if (document.getElementById('discoverScreen').classList.contains('active')) loadStreams();
 }, 10000);
 </script>
 </body>

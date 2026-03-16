@@ -2,283 +2,367 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>HOST — LiveStream Studio</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0a0a0f;
-      --surface:   #12121a;
-      --card:      #1a1a26;
-      --border:    #2a2a3e;
-      --primary:   #ff3b3b;
-      --primary-d: #cc2020;
-      --accent:    #ff7b00;
-      --green:     #00e676;
-      --yellow:    #ffd600;
-      --text:      #f0f0f8;
-      --muted:     #6b6b8a;
-      --radius:    12px;
+      --primary: #fe2c55;
+      --primary-d: #c9003c;
+      --accent: #25f4ee;
+      --yellow: #ffd600;
+      --green: #00e676;
+      --text: #ffffff;
+      --muted: rgba(255,255,255,0.55);
+      --bg-chat: rgba(0,0,0,0.45);
+      --radius: 14px;
     }
 
-    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+    html, body { height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', system-ui, sans-serif; color: var(--text); }
 
-    /* ── Layout ── */
-    .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
-
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 20px;
-      display: flex; align-items: center; justify-content: space-between;
+    /* ─── SETUP SCREEN ─── */
+    #setupScreen {
+      position: fixed; inset: 0; z-index: 50;
+      background: linear-gradient(160deg, #0d0d14 0%, #1a0a0f 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px; gap: 0;
+      overflow-y: auto;
     }
-    .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; }
-    .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+    #setupScreen.hidden { display: none; }
 
-    .status-badge {
-      padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
-      background: var(--card); border: 1px solid var(--border);
+    .setup-logo {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 32px;
+      font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
     }
-    .status-badge.live { background: rgba(255,59,59,.15); border-color: var(--primary); color: var(--primary); }
-
-    main { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - 57px); overflow: hidden; }
-
-    /* ── Video Panel ── */
-    .video-panel { display: flex; flex-direction: column; padding: 20px; gap: 16px; overflow-y: auto; }
-
-    .video-wrap {
-      position: relative; border-radius: var(--radius);
-      overflow: hidden; background: #000; aspect-ratio: 16/9;
-      border: 1px solid var(--border);
+    .logo-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--primary); animation: pulse 1.4s infinite;
     }
-    #localVideo { width: 100%; height: 100%; object-fit: cover; display: block; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }
 
-    .video-overlay {
-      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      display: flex; align-items: center; justify-content: center;
-      background: rgba(0,0,0,.7); flex-direction: column; gap: 8px;
+    .setup-card {
+      width: 100%; max-width: 400px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 18px;
     }
-    .video-overlay.hidden { display: none; }
-    .video-overlay p { color: var(--muted); font-size: 14px; }
+    .setup-card h2 { font-size: 20px; font-weight: 700; }
+    .setup-card p { font-size: 14px; color: var(--muted); margin-top: -10px; }
 
-    .stream-meta {
-      position: absolute; top: 12px; left: 12px;
-      display: flex; gap: 8px; flex-wrap: wrap;
-    }
-    .meta-pill {
-      background: rgba(0,0,0,.75); backdrop-filter: blur(8px);
-      padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
-    }
-    .meta-pill.live-pill { color: var(--primary); border: 1px solid var(--primary); }
-    .meta-pill.id-pill { color: #fff; }
-    .meta-pill.viewer-pill { color: var(--accent); }
-
-    /* ── Controls ── */
-    .controls { display: flex; flex-direction: column; gap: 12px; }
-
-    .setup-form {
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 12px;
-    }
-    .setup-form h3 { font-size: 14px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
-
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-    .field { display: flex; flex-direction: column; gap: 6px; }
-    .field label { font-size: 12px; color: var(--muted); font-weight: 500; }
+    .field { display: flex; flex-direction: column; gap: 7px; }
+    .field label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
     .field input {
-      background: var(--surface); border: 1px solid var(--border); color: var(--text);
-      border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; transition: border .2s;
+      background: rgba(255,255,255,0.08); border: 1.5px solid rgba(255,255,255,0.12);
+      color: #fff; border-radius: 10px; padding: 12px 14px; font-size: 15px; outline: none;
+      transition: border-color .2s;
     }
     .field input:focus { border-color: var(--primary); }
-
-    .btn-row { display: flex; gap: 10px; }
+    .field input::placeholder { color: rgba(255,255,255,0.3); }
 
     .btn {
-      flex: 1; padding: 12px; border-radius: 10px; border: none; font-size: 14px;
-      font-weight: 600; cursor: pointer; transition: all .2s; min-height: 44px;
+      width: 100%; padding: 14px; border-radius: 12px; border: none; font-size: 15px;
+      font-weight: 700; cursor: pointer; transition: all .2s; min-height: 50px;
     }
-    .btn-primary { background: var(--primary); color: #fff; }
-    .btn-primary:hover { background: var(--primary-d); transform: translateY(-1px); }
-    .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-    .btn-danger { background: rgba(255,59,59,.15); color: var(--primary); border: 1px solid var(--primary); }
-    .btn-danger:hover { background: rgba(255,59,59,.3); }
-    .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
-    .btn-secondary:hover { border-color: var(--muted); }
+    .btn-cam { background: rgba(255,255,255,0.1); color: #fff; border: 1.5px solid rgba(255,255,255,0.2); }
+    .btn-cam:hover { background: rgba(255,255,255,0.18); }
+    .btn-cam:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-live { background: var(--primary); color: #fff; }
+    .btn-live:hover:not(:disabled) { background: var(--primary-d); transform: scale(1.02); }
+    .btn-live:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 
-    /* ── Stats ── */
-    .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
-    .stat-card {
-      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 14px; text-align: center;
+    .cam-preview-wrap {
+      position: relative; border-radius: 14px; overflow: hidden;
+      background: #111; aspect-ratio: 9/16; max-height: 200px;
     }
-    .stat-val { font-size: 22px; font-weight: 700; }
-    .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
-    .stat-card.active .stat-val { color: var(--green); }
-    .stat-card.viewers .stat-val { color: var(--accent); }
-    .stat-card.stream-id .stat-val { font-size: 16px; color: var(--yellow); letter-spacing: 2px; }
-
-    /* ── Chat Panel ── */
-    .chat-panel {
-      border-left: 1px solid var(--border);
-      display: flex; flex-direction: column;
-      background: var(--surface);
-      height: 100%;
+    #previewVideo { width: 100%; height: 100%; object-fit: cover; display: block; transform: scaleX(-1); }
+    .cam-off {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 6px; color: var(--muted);
+      font-size: 13px;
     }
-    .chat-header {
-      padding: 16px 18px; border-bottom: 1px solid var(--border);
-      font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+    .cam-off.hidden { display: none; }
+
+    /* ─── LIVE SCREEN ─── */
+    #liveScreen {
+      position: fixed; inset: 0; z-index: 40;
+      display: none;
     }
-    .chat-header::before { content: '💬'; }
+    #liveScreen.active { display: block; }
 
-    .chat-messages {
-      flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
-      scroll-behavior: smooth;
+    /* Full-screen vertical video background */
+    #localVideo {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; display: block;
+      transform: scaleX(-1); /* Mirror for host */
     }
-    .chat-messages::-webkit-scrollbar { width: 4px; }
-    .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-    .msg { max-width: 100%; }
-    .msg-header { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
-    .msg-name { font-size: 12px; font-weight: 700; }
-    .msg-name.host { color: var(--yellow); }
-    .msg-name.viewer { color: #fff; }
-    .msg-time { font-size: 10px; color: var(--muted); }
-    .msg-body { font-size: 14px; line-height: 1.4; word-break: break-word; }
+    /* Dark gradient overlays */
+    .grad-top {
+      position: absolute; top: 0; left: 0; right: 0; height: 140px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+      pointer-events: none; z-index: 2;
+    }
+    .grad-bottom {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 55%;
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 50%, transparent 100%);
+      pointer-events: none; z-index: 2;
+    }
 
-    .chat-input-area {
-      padding: 12px; border-top: 1px solid var(--border);
-      display: flex; gap: 8px;
+    /* ── Top Bar ── */
+    .top-bar {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+      padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .top-left { display: flex; align-items: center; gap: 10px; }
+    .live-badge {
+      background: var(--primary); color: #fff; font-size: 12px; font-weight: 800;
+      padding: 4px 12px; border-radius: 6px; letter-spacing: 1px;
+    }
+    .viewer-pill {
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 600;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .viewer-pill svg { opacity: .8; }
+
+    .btn-end {
+      background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
+      border: 1.5px solid rgba(255,255,255,0.25); color: #fff;
+      padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 700;
+      cursor: pointer; transition: all .2s; min-height: 36px;
+    }
+    .btn-end:hover { background: rgba(255,44,85,0.6); border-color: var(--primary); }
+
+    /* ── Stream Info (below host avatar) ── */
+    .stream-info-overlay {
+      position: absolute; bottom: 200px; left: 16px; right: 80px; z-index: 10;
+    }
+    .host-name-tag {
+      display: inline-flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    }
+    .host-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 700; border: 2px solid #fff;
+    }
+    .host-name { font-size: 15px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+    .stream-title-text {
+      font-size: 13px; color: rgba(255,255,255,0.85);
+      text-shadow: 0 1px 3px rgba(0,0,0,.8);
+      line-height: 1.4;
+    }
+    .stream-id-tag {
+      margin-top: 6px; font-size: 11px; color: var(--yellow);
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(6px);
+      display: inline-block; padding: 3px 10px; border-radius: 20px;
+      border: 1px solid rgba(255,214,0,0.4);
+    }
+
+    /* ── Right Action Bar (TikTok style) ── */
+    .right-bar {
+      position: absolute; right: 12px; bottom: 200px; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; gap: 20px;
+    }
+    .action-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      cursor: pointer; user-select: none;
+    }
+    .action-icon {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: rgba(255,255,255,0.15); backdrop-filter: blur(8px);
+      border: 1.5px solid rgba(255,255,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; transition: transform .15s, background .15s;
+    }
+    .action-btn:active .action-icon { transform: scale(.88); background: rgba(255,255,255,0.25); }
+    .action-label { font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 500; }
+
+    /* ── Chat Area (TikTok style - overlay on video) ── */
+    .chat-area {
+      position: absolute; bottom: 90px; left: 0; right: 68px; z-index: 10;
+      max-height: 220px; display: flex; flex-direction: column; gap: 0;
+      overflow: hidden;
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 30%);
+      mask-image: linear-gradient(to bottom, transparent 0%, black 30%);
+    }
+    .chat-scroll { overflow-y: auto; padding: 0 12px 4px; display: flex; flex-direction: column; gap: 6px; }
+    .chat-scroll::-webkit-scrollbar { display: none; }
+
+    .chat-msg {
+      display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px;
+      background: rgba(0,0,0,0.35); backdrop-filter: blur(6px);
+      border-radius: 20px; padding: 6px 12px;
+      max-width: fit-content;
+      animation: slideUp .25s ease;
+    }
+    @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    .chat-msg .cn { font-size: 13px; font-weight: 700; margin-right: 2px; }
+    .chat-msg .cn.host { color: var(--yellow); }
+    .chat-msg .cn.viewer { color: var(--accent); }
+    .chat-msg .ct { font-size: 13px; color: #fff; word-break: break-word; }
+
+    /* ── Chat Input Bar ── */
+    .chat-input-bar {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+      padding: 10px 12px 20px;
+      display: flex; gap: 8px; align-items: center;
+      background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
     }
     .chat-input {
-      flex: 1; background: var(--card); border: 1px solid var(--border);
-      color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 14px; outline: none;
-      transition: border .2s;
+      flex: 1; background: rgba(255,255,255,0.12); backdrop-filter: blur(8px);
+      border: 1.5px solid rgba(255,255,255,0.2); color: #fff;
+      border-radius: 24px; padding: 10px 16px; font-size: 14px; outline: none;
+      transition: border-color .2s; min-height: 44px;
     }
-    .chat-input:focus { border-color: var(--yellow); }
-    .chat-send {
-      background: var(--yellow); color: #000; border: none; border-radius: 8px;
-      padding: 10px 16px; font-weight: 700; font-size: 14px; cursor: pointer; transition: all .2s;
-      min-width: 44px; min-height: 44px;
+    .chat-input:focus { border-color: rgba(255,255,255,0.5); }
+    .chat-input::placeholder { color: rgba(255,255,255,0.45); }
+    .chat-input:disabled { opacity: .4; }
+    .chat-send-btn {
+      width: 44px; height: 44px; border-radius: 50%; border: none;
+      background: var(--primary); color: #fff; font-size: 18px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: transform .15s; flex-shrink: 0;
     }
-    .chat-send:hover { background: #e6c200; }
-
-    .empty-chat { text-align: center; color: var(--muted); font-size: 13px; margin: auto; padding: 20px; }
-
-    /* ── Responsive ── */
-    @media (max-width: 768px) {
-      main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-      .chat-panel { border-left: none; border-top: 1px solid var(--border); height: 300px; }
-      .form-row { grid-template-columns: 1fr; }
-      .stats { grid-template-columns: repeat(3,1fr); }
-    }
+    .chat-send-btn:hover { transform: scale(1.1); }
+    .chat-send-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 
     /* ── Toast ── */
     .toast {
-      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-      background: var(--card); border: 1px solid var(--border); color: var(--text);
-      padding: 10px 20px; border-radius: 10px; font-size: 14px;
-      opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; white-space: nowrap;
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,.85); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.15); color: #fff;
+      padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 500;
+      opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999;
+      white-space: nowrap;
     }
     .toast.show { opacity: 1; }
     .toast.success { border-color: var(--green); color: var(--green); }
     .toast.error { border-color: var(--primary); color: var(--primary); }
+
+    /* ── Responsive desktop ── */
+    @media (min-width: 480px) {
+      #liveScreen { display: none; }
+      #liveScreen.active { display: flex; align-items: center; justify-content: center; }
+      #localVideo { width: auto; height: 100%; max-width: calc(100vh * 9 / 16); left: 50%; transform: translateX(-50%) scaleX(-1); }
+      .top-bar, .stream-info-overlay, .right-bar, .chat-area, .chat-input-bar, .grad-top, .grad-bottom {
+        max-width: calc(100vh * 9 / 16);
+        left: 50%; transform: translateX(-50%);
+        right: auto; width: 100%;
+      }
+      .top-bar { transform: translateX(-50%); }
+      .grad-top { transform: translateX(-50%); }
+      .grad-bottom { transform: translateX(-50%); }
+    }
   </style>
 </head>
 <body>
-<div class="app">
 
-  <header>
-    <div class="logo">
-      <div class="logo-dot" id="liveDot" style="background:var(--muted)"></div>
-      LiveStream Studio
-    </div>
-    <div class="status-badge" id="statusBadge">OFFLINE</div>
-  </header>
+<!-- ─── SETUP SCREEN ───────────────────────────────────────────────────── -->
+<div id="setupScreen">
+  <div class="setup-logo">
+    <div class="logo-dot"></div>
+    LiveStream Studio
+  </div>
 
-  <main>
-    <!-- Video + Controls -->
-    <div class="video-panel">
-      <div class="video-wrap">
-        <video id="localVideo" autoplay playsinline muted></video>
-        <div class="video-overlay" id="videoOverlay">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/></svg>
-          <p>Kamera belum aktif</p>
-        </div>
-        <div class="stream-meta" id="streamMeta" style="display:none">
-          <span class="meta-pill live-pill">● LIVE</span>
-          <span class="meta-pill id-pill" id="metaStreamId">—</span>
-          <span class="meta-pill viewer-pill" id="metaViewers">0 penonton</span>
-        </div>
-      </div>
+  <div class="setup-card">
+    <h2>🎬 Mulai Siaran</h2>
+    <p>Isi info dan aktifkan kamera sebelum go live</p>
 
-      <!-- Stats -->
-      <div class="stats">
-        <div class="stat-card active">
-          <div class="stat-val" id="statStatus">OFF</div>
-          <div class="stat-label">Status</div>
-        </div>
-        <div class="stat-card viewers">
-          <div class="stat-val" id="statViewers">0</div>
-          <div class="stat-label">Penonton</div>
-        </div>
-        <div class="stat-card stream-id">
-          <div class="stat-val" id="statStreamId">—</div>
-          <div class="stat-label">Stream ID</div>
-        </div>
-      </div>
-
-      <!-- Setup Form -->
-      <div class="setup-form" id="setupForm">
-        <h3>Setup Stream</h3>
-        <div class="form-row">
-          <div class="field">
-            <label>Nama Host</label>
-            <input type="text" id="hostName" placeholder="Nama Anda" value="Host" />
-          </div>
-          <div class="field">
-            <label>Judul Stream</label>
-            <input type="text" id="streamTitle" placeholder="Judul siaran..." value="Live Streaming Saya" />
-          </div>
-        </div>
-        <div class="btn-row">
-          <button class="btn btn-secondary" id="btnCamera" onclick="startCamera()">📷 Aktifkan Kamera</button>
-          <button class="btn btn-primary" id="btnGoLive" onclick="goLive()" disabled>🔴 GO LIVE</button>
-        </div>
-        <button class="btn btn-danger" id="btnEndStream" onclick="endStream()" style="display:none">⏹ Akhiri Stream</button>
+    <!-- Camera preview -->
+    <div class="cam-preview-wrap">
+      <video id="previewVideo" autoplay playsinline muted></video>
+      <div class="cam-off" id="camOff">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/><line x1="2" y1="2" x2="22" y2="22" stroke="rgba(255,255,255,0.3)"/></svg>
+        <span>Kamera belum aktif</span>
       </div>
     </div>
 
-    <!-- Chat -->
-    <div class="chat-panel">
-      <div class="chat-header">Live Chat</div>
-      <div class="chat-messages" id="chatMessages">
-        <div class="empty-chat">Chat akan aktif saat live dimulai</div>
-      </div>
-      <div class="chat-input-area">
-        <input type="text" class="chat-input" id="chatInput" placeholder="Tulis pesan..." maxlength="200" onkeydown="if(event.key==='Enter')sendChat()" disabled />
-        <button class="chat-send" onclick="sendChat()" id="chatSendBtn" disabled>➤</button>
-      </div>
+    <div class="field">
+      <label>Nama Host</label>
+      <input type="text" id="hostName" placeholder="Nama kamu..." value="Host" maxlength="30" />
     </div>
-  </main>
+    <div class="field">
+      <label>Judul Stream</label>
+      <input type="text" id="streamTitle" placeholder="Judul siaran..." value="Live Streaming Saya" maxlength="60" />
+    </div>
+
+    <button class="btn btn-cam" id="btnCamera" onclick="startCamera()">📷 Aktifkan Kamera</button>
+    <button class="btn btn-live" id="btnGoLive" onclick="goLive()" disabled>🔴 GO LIVE</button>
+  </div>
+</div>
+
+<!-- ─── LIVE SCREEN ────────────────────────────────────────────────────── -->
+<div id="liveScreen">
+
+  <!-- Video background -->
+  <video id="localVideo" autoplay playsinline muted></video>
+
+  <!-- Gradients -->
+  <div class="grad-top"></div>
+  <div class="grad-bottom"></div>
+
+  <!-- Top bar -->
+  <div class="top-bar">
+    <div class="top-left">
+      <span class="live-badge">● LIVE</span>
+      <span class="viewer-pill">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        <span id="statViewers">0</span>
+      </span>
+    </div>
+    <button class="btn-end" onclick="endStream()">Akhiri Live</button>
+  </div>
+
+  <!-- Host info -->
+  <div class="stream-info-overlay">
+    <div class="host-name-tag">
+      <div class="host-avatar" id="avatarLetter">H</div>
+      <span class="host-name" id="displayHostName">Host</span>
+    </div>
+    <div class="stream-title-text" id="displayTitle">Live Streaming</div>
+    <div class="stream-id-tag">ID: <span id="displayStreamId">—</span></div>
+  </div>
+
+  <!-- Right action bar -->
+  <div class="right-bar">
+    <div class="action-btn" onclick="toggleCamera()">
+      <div class="action-icon" id="camIcon">🔄</div>
+      <span class="action-label">Flip</span>
+    </div>
+    <div class="action-btn" onclick="toggleMic()">
+      <div class="action-icon" id="micIcon">🎙️</div>
+      <span class="action-label">Mic</span>
+    </div>
+  </div>
+
+  <!-- Chat overlay -->
+  <div class="chat-area">
+    <div class="chat-scroll" id="chatScroll"></div>
+  </div>
+
+  <!-- Chat input -->
+  <div class="chat-input-bar">
+    <input type="text" class="chat-input" id="chatInput" placeholder="Chat dengan penonton..." maxlength="200"
+           onkeydown="if(event.key==='Enter')sendChat()" disabled />
+    <button class="chat-send-btn" id="chatSendBtn" onclick="sendChat()" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-// ── Socket ─────────────────────────────────────────────────────────────────
 const socket = io();
 
-// ── State ──────────────────────────────────────────────────────────────────
 let localStream = null;
 let streamId = null;
 let isLive = false;
-let viewerCount = 0;
-let startTime = null;
-/** @type {Map<string, RTCPeerConnection>} viewerId → pc */
+let micMuted = false;
 const peerConnections = new Map();
 
 const ICE_CONFIG = {
@@ -299,18 +383,17 @@ const ICE_CONFIG = {
 async function startCamera() {
   try {
     const constraints = {
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 1280 }, frameRate: { ideal: 30 } },
       audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 }
     };
     localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    const video = document.getElementById('localVideo');
-    video.srcObject = localStream;
-    await video.play();
-    document.getElementById('videoOverlay').classList.add('hidden');
+    document.getElementById('previewVideo').srcObject = localStream;
+    document.getElementById('previewVideo').play();
+    document.getElementById('camOff').classList.add('hidden');
     document.getElementById('btnGoLive').disabled = false;
     document.getElementById('btnCamera').textContent = '✅ Kamera Aktif';
     document.getElementById('btnCamera').disabled = true;
-    showToast('Kamera aktif! Siap Go Live.', 'success');
+    showToast('Kamera aktif!', 'success');
   } catch (err) {
     console.error('[CAMERA]', err);
     showToast('Gagal akses kamera: ' + err.message, 'error');
@@ -319,97 +402,60 @@ async function startCamera() {
 
 // ── Go Live ────────────────────────────────────────────────────────────────
 function goLive() {
-  if (!localStream || !localStream.active) {
-    showToast('Aktifkan kamera terlebih dahulu!', 'error');
-    return;
-  }
+  if (!localStream || !localStream.active) { showToast('Aktifkan kamera dulu!', 'error'); return; }
   const title = document.getElementById('streamTitle').value.trim() || 'Live Stream';
   const hostName = document.getElementById('hostName').value.trim() || 'Host';
   socket.emit('host:register', { title, hostName });
 }
 
+// ── Toggle Camera/Mic ──────────────────────────────────────────────────────
+function toggleCamera() {
+  // Flip front/back cam
+  const video = document.getElementById('localVideo');
+  const curTransform = video.style.transform || '';
+  video.style.transform = curTransform.includes('scaleX(-1)') ? '' : 'scaleX(-1)';
+}
+
+function toggleMic() {
+  if (!localStream) return;
+  localStream.getAudioTracks().forEach(t => {
+    t.enabled = !t.enabled;
+    micMuted = !t.enabled;
+  });
+  document.getElementById('micIcon').textContent = micMuted ? '🔇' : '🎙️';
+  showToast(micMuted ? 'Mikrofon dimatikan' : 'Mikrofon aktif');
+}
+
 // ── Create Peer for Viewer ─────────────────────────────────────────────────
-async function createPeerForViewer(viewerId, viewerName) {
-  console.log('[PEER] Creating connection for viewer', viewerId);
+async function createPeerForViewer(viewerId) {
   const pc = new RTCPeerConnection(ICE_CONFIG);
   peerConnections.set(viewerId, pc);
-
-  // Add all local tracks AFTER stream is confirmed active
-  localStream.getTracks().forEach(track => {
-    console.log('[PEER] Adding track:', track.kind);
-    pc.addTrack(track, localStream);
-  });
-
-  // ICE candidates
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit('rtc:ice', { targetId: viewerId, candidate: event.candidate });
-    }
-  };
-
-  pc.oniceconnectionstatechange = () => {
-    console.log(`[ICE] Viewer ${viewerId}:`, pc.iceConnectionState);
-    if (pc.iceConnectionState === 'failed') {
-      console.log('[ICE] Restarting ICE for', viewerId);
-      pc.restartIce();
-    }
-  };
-
-  pc.onconnectionstatechange = () => {
-    console.log(`[CONN] Viewer ${viewerId}:`, pc.connectionState);
-  };
-
-  // Create offer
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.onicecandidate = (e) => { if (e.candidate) socket.emit('rtc:ice', { targetId: viewerId, candidate: e.candidate }); };
+  pc.oniceconnectionstatechange = () => { if (pc.iceConnectionState === 'failed') pc.restartIce(); };
   const offer = await pc.createOffer({ offerToReceiveVideo: false, offerToReceiveAudio: false });
   await pc.setLocalDescription(offer);
   socket.emit('rtc:offer', { targetId: viewerId, offer: pc.localDescription });
-  console.log('[OFFER] Sent to', viewerId);
 }
 
 // ── End Stream ─────────────────────────────────────────────────────────────
 function endStream() {
-  if (!confirm('Yakin mengakhiri live stream?')) return;
+  if (!confirm('Yakin mengakhiri stream?')) return;
   socket.emit('host:end');
   cleanupStream();
 }
 
 function cleanupStream() {
-  peerConnections.forEach(pc => pc.close());
-  peerConnections.clear();
-  if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
-    localStream = null;
-  }
-  isLive = false;
-  streamId = null;
-  updateUI(false);
-}
-
-// ── UI Update ──────────────────────────────────────────────────────────────
-function updateUI(live) {
-  document.getElementById('liveDot').style.background = live ? 'var(--primary)' : 'var(--muted)';
-  document.getElementById('statusBadge').textContent = live ? '🔴 LIVE' : 'OFFLINE';
-  document.getElementById('statusBadge').className = 'status-badge' + (live ? ' live' : '');
-  document.getElementById('statStatus').textContent = live ? 'ON' : 'OFF';
-  document.getElementById('streamMeta').style.display = live ? 'flex' : 'none';
-  document.getElementById('btnGoLive').style.display = live ? 'none' : '';
-  document.getElementById('btnEndStream').style.display = live ? '' : 'none';
-  document.getElementById('chatInput').disabled = !live;
-  document.getElementById('chatSendBtn').disabled = !live;
-  if (!live) {
-    document.getElementById('statViewers').textContent = '0';
-    document.getElementById('statStreamId').textContent = '—';
-    document.getElementById('videoOverlay').classList.remove('hidden');
-    document.getElementById('btnCamera').disabled = false;
-    document.getElementById('btnCamera').textContent = '📷 Aktifkan Kamera';
-    document.getElementById('btnGoLive').disabled = true;
-  }
-}
-
-function updateViewerCount(count) {
-  viewerCount = count;
-  document.getElementById('statViewers').textContent = count;
-  document.getElementById('metaViewers').textContent = `${count} penonton`;
+  peerConnections.forEach(p => p.close()); peerConnections.clear();
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  isLive = false; streamId = null;
+  document.getElementById('liveScreen').classList.remove('active');
+  document.getElementById('setupScreen').classList.remove('hidden');
+  document.getElementById('btnGoLive').disabled = true;
+  document.getElementById('btnCamera').disabled = false;
+  document.getElementById('btnCamera').textContent = '📷 Aktifkan Kamera';
+  document.getElementById('chatInput').disabled = true;
+  document.getElementById('chatSendBtn').disabled = true;
 }
 
 // ── Chat ───────────────────────────────────────────────────────────────────
@@ -417,60 +463,57 @@ function sendChat() {
   const input = document.getElementById('chatInput');
   const msg = input.value.trim();
   if (!msg || !streamId) return;
-  const hostName = document.getElementById('hostName').value.trim() || 'Host';
-  socket.emit('chat:send', { streamId, message: msg, name: hostName, role: 'host' });
+  const name = document.getElementById('hostName').value.trim() || 'Host';
+  socket.emit('chat:send', { streamId, message: msg, name, role: 'host' });
   input.value = '';
 }
 
 function appendChat(data) {
-  const container = document.getElementById('chatMessages');
-  const empty = container.querySelector('.empty-chat');
-  if (empty) empty.remove();
-
+  const scroll = document.getElementById('chatScroll');
   const div = document.createElement('div');
-  div.className = 'msg';
-  const t = new Date(data.ts);
-  const time = t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-  div.innerHTML = `
-    <div class="msg-header">
-      <span class="msg-name ${data.role}">${escHtml(data.name)}</span>
-      <span class="msg-time">${time}</span>
-    </div>
-    <div class="msg-body">${escHtml(data.message)}</div>
-  `;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
+  div.className = 'chat-msg';
+  div.innerHTML = `<span class="cn ${data.role}">${escHtml(data.name)}</span><span class="ct">${escHtml(data.message)}</span>`;
+  scroll.appendChild(div);
+  // Keep max 50 messages
+  while (scroll.children.length > 50) scroll.removeChild(scroll.firstChild);
+  scroll.scrollTop = scroll.scrollHeight;
 }
 
-function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Toast ──────────────────────────────────────────────────────────────────
 let toastTimer;
 function showToast(msg, type = '') {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show' + (type ? ' ' + type : '');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.className = 'toast', 3000);
+  t.textContent = msg; t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = 'toast', 3000);
 }
 
 // ── Socket Events ──────────────────────────────────────────────────────────
 socket.on('host:registered', ({ streamId: sid }) => {
-  streamId = sid;
-  isLive = true;
-  updateUI(true);
-  document.getElementById('statStreamId').textContent = sid;
-  document.getElementById('metaStreamId').textContent = `ID: ${sid}`;
-  showToast(`Stream dimulai! ID: ${sid}`, 'success');
-  console.log('[LIVE] Stream ID:', sid);
+  streamId = sid; isLive = true;
+  const name = document.getElementById('hostName').value.trim() || 'Host';
+  const title = document.getElementById('streamTitle').value.trim() || 'Live Stream';
+  // Switch to live screen
+  document.getElementById('setupScreen').classList.add('hidden');
+  const liveVideo = document.getElementById('localVideo');
+  liveVideo.srcObject = localStream;
+  liveVideo.play();
+  document.getElementById('liveScreen').classList.add('active');
+  // Update UI
+  document.getElementById('displayHostName').textContent = name;
+  document.getElementById('displayTitle').textContent = title;
+  document.getElementById('displayStreamId').textContent = sid;
+  document.getElementById('avatarLetter').textContent = name.charAt(0).toUpperCase();
+  document.getElementById('chatInput').disabled = false;
+  document.getElementById('chatSendBtn').disabled = false;
+  showToast('Live dimulai! ID: ' + sid, 'success');
 });
 
 socket.on('viewer:joined', async ({ viewerId, viewerName }) => {
-  console.log('[VIEWER JOIN]', viewerId, viewerName);
-  showToast(`${viewerName} bergabung! 👋`, 'success');
-  await createPeerForViewer(viewerId, viewerName);
+  showToast(viewerName + ' bergabung! 👋');
+  await createPeerForViewer(viewerId);
 });
 
 socket.on('viewer:left', ({ viewerId }) => {
@@ -481,31 +524,24 @@ socket.on('viewer:left', ({ viewerId }) => {
 socket.on('rtc:answer', async ({ from, answer }) => {
   const pc = peerConnections.get(from);
   if (!pc) return;
-  try {
-    await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    console.log('[ANSWER] Set from', from);
-  } catch (e) { console.error('[ANSWER ERROR]', e); }
+  try { await pc.setRemoteDescription(new RTCSessionDescription(answer)); } catch(e) { console.error(e); }
 });
 
 socket.on('rtc:ice', async ({ from, candidate }) => {
   const pc = peerConnections.get(from);
   if (!pc) return;
-  try {
-    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-  } catch (e) { console.warn('[ICE ERROR]', e.message); }
+  try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
 });
 
-socket.on('viewer:count', ({ count }) => updateViewerCount(count));
+socket.on('viewer:count', ({ count }) => {
+  document.getElementById('statViewers').textContent = count;
+});
 
+// ── FIX: Chat dari penonton muncul di host ─────────────────────────────────
 socket.on('chat:message', (data) => appendChat(data));
 
-socket.on('disconnect', () => {
-  showToast('Koneksi terputus. Mencoba reconnect...', 'error');
-});
-
-socket.on('connect', () => {
-  if (isLive) showToast('Terhubung kembali!', 'success');
-});
+socket.on('disconnect', () => showToast('Koneksi terputus...', 'error'));
+socket.on('connect', () => { if (isLive) showToast('Terhubung kembali!', 'success'); });
 </script>
 </body>
 </html>
