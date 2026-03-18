@@ -1,376 +1,241 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Tonton Live — LiveStream</title>
-  <script src="/socket.io/socket.io.js"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>Tonton Live — LiveStream</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --red:#fe2c55;--cyan:#25f4ee;--yellow:#ffd600;
+  --green:#00e676;--purple:#9b59f4;
+  --muted:rgba(255,255,255,.55);--glass:rgba(255,255,255,.1);
+}
+html,body{height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',system-ui,sans-serif;color:#fff}
 
-    :root {
-      --primary: #fe2c55;
-      --accent: #25f4ee;
-      --yellow: #ffd600;
-      --green: #00e676;
-      --text: #ffffff;
-      --muted: rgba(255,255,255,0.55);
-    }
+/* ─── SCREENS ──────────────────────────────────────────────────────────── */
+.screen{display:none;position:fixed;inset:0}
+.screen.active{display:flex}
 
-    html, body { height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', system-ui, sans-serif; color: var(--text); }
+/* ─── DISCOVER ─────────────────────────────────────────────────────────── */
+#discoverScreen{flex-direction:column;background:linear-gradient(160deg,#0d0d14,#14080e);overflow-y:auto}
+.disc-header{
+  padding:14px 16px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.35);
+  backdrop-filter:blur(12px);position:sticky;top:0;z-index:5;flex-shrink:0;
+}
+.logo{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:800}
+.logo-dot{width:10px;height:10px;border-radius:50%;background:var(--red);animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+.btn-refresh{
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
+  color:#fff;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;gap:5px;min-height:36px;transition:background .2s;
+}
+.btn-refresh:hover{background:rgba(255,255,255,.15)}
+.disc-body{flex:1;padding:18px 14px;display:flex;flex-direction:column;gap:16px}
+.disc-body h2{font-size:20px;font-weight:800}
+.disc-sub{font-size:13px;color:var(--muted);margin-top:-10px}
+.stream-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.stream-card{
+  position:relative;border-radius:14px;overflow:hidden;aspect-ratio:9/16;
+  background:#111;cursor:pointer;transition:transform .2s,box-shadow .2s;
+  border:1.5px solid rgba(255,255,255,.08);
+}
+.stream-card:hover{transform:scale(1.03);box-shadow:0 8px 30px rgba(254,44,85,.3);border-color:var(--red)}
+.stream-card:active{transform:scale(.97)}
+.card-thumb{width:100%;height:100%;background:linear-gradient(135deg,#1a0a18,#0a1020);display:flex;align-items:center;justify-content:center}
+.card-grad{position:absolute;bottom:0;left:0;right:0;height:70%;background:linear-gradient(to top,rgba(0,0,0,.9),transparent)}
+.card-live{position:absolute;top:8px;left:8px;background:var(--red);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:4px;letter-spacing:.8px}
+.card-viewers{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px}
+.card-info{position:absolute;bottom:10px;left:10px;right:10px}
+.card-title{font-size:13px;font-weight:700;line-height:1.3;margin-bottom:2px}
+.card-host{font-size:11px;color:rgba(255,255,255,.7)}
+.empty-disc{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:60px 20px;color:var(--muted);text-align:center;grid-column:1/-1}
 
-    /* ─── SCREENS ─── */
-    .screen { display: none; position: fixed; inset: 0; }
-    .screen.active { display: flex; }
+/* ─── JOIN MODAL ────────────────────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(10px);z-index:100;display:flex;align-items:flex-end;justify-content:center}
+.modal-overlay.hidden{display:none}
+.modal{background:#1a1a26;border-radius:22px 22px 0 0;padding:22px 22px 34px;width:100%;max-width:440px;display:flex;flex-direction:column;gap:16px;animation:slideUp .25s ease}
+@keyframes slideUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-handle{width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.2);margin:0 auto -4px}
+.modal h3{font-size:17px;font-weight:800;text-align:center}
+.modal .modal-desc{font-size:13px;color:var(--muted);text-align:center;margin-top:-10px}
+.field label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px}
+.field input{width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.12);color:#fff;border-radius:12px;padding:12px 14px;font-size:15px;outline:none;transition:border-color .2s}
+.field input:focus{border-color:var(--red)}
+.field input::placeholder{color:rgba(255,255,255,.3)}
+.modal-btns{display:flex;gap:9px}
+.btn{flex:1;padding:13px;border-radius:12px;border:none;font-size:14px;font-weight:700;cursor:pointer;min-height:48px;transition:all .2s}
+.btn-watch{background:var(--red);color:#fff}
+.btn-watch:hover{background:#c9003c}
+.btn-cancel{background:rgba(255,255,255,.08);color:rgba(255,255,255,.75)}
 
-    /* ─── DISCOVER SCREEN ─── */
-    #discoverScreen {
-      flex-direction: column;
-      background: linear-gradient(160deg, #0d0d14 0%, #14080e 100%);
-      overflow-y: auto;
-    }
+/* ─── WATCH SCREEN ──────────────────────────────────────────────────────── */
+#watchScreen{background:#000;flex-direction:column;align-items:center;justify-content:center}
+.watch-container{position:relative;width:100%;height:100%;max-width:calc(100vh*9/16);overflow:hidden;background:#000}
+#remoteVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#000}
 
-    .disc-header {
-      padding: 16px 18px; display: flex; align-items: center; justify-content: space-between;
-      border-bottom: 1px solid rgba(255,255,255,0.07);
-      background: rgba(0,0,0,0.3); backdrop-filter: blur(12px);
-      position: sticky; top: 0; z-index: 5;
-      flex-shrink: 0;
-    }
-    .logo { display: flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 800; }
-    .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); animation: pulse 1.4s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }
+/* Co-host grid: when co-hosting, show local + remote */
+#coGrid{
+  position:absolute;inset:0;display:none;
+  grid-template-columns:1fr 1fr;grid-template-rows:1fr;gap:2px;background:#111;z-index:1;
+}
+#coGrid.show{display:grid}
+#coGrid video{width:100%;height:100%;object-fit:cover;display:block}
+.co-label{position:absolute;bottom:6px;left:8px;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);font-size:10px;font-weight:700;padding:2px 7px;border-radius:12px}
+.co-label.me{color:var(--purple)}
+.co-label.host{color:var(--yellow)}
+.co-cell{position:relative}
 
-    .btn-refresh {
-      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-      color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
-      cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 38px;
-      transition: background .2s;
-    }
-    .btn-refresh:hover { background: rgba(255,255,255,0.14); }
+.w-grad-top{position:absolute;top:0;left:0;right:0;height:150px;background:linear-gradient(to bottom,rgba(0,0,0,.72),transparent);pointer-events:none;z-index:2}
+.w-grad-bottom{position:absolute;bottom:0;left:0;right:0;height:58%;background:linear-gradient(to top,rgba(0,0,0,.88) 0%,rgba(0,0,0,.4) 50%,transparent 100%);pointer-events:none;z-index:2}
 
-    .disc-body { flex: 1; padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; }
-    .disc-body h2 { font-size: 22px; font-weight: 800; }
-    .disc-sub { font-size: 14px; color: var(--muted); margin-top: -14px; }
+/* Loading */
+#loadingOverlay{position:absolute;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:20}
+#loadingOverlay.hidden{display:none}
+.spinner{width:42px;height:42px;border:3px solid rgba(255,255,255,.1);border-top-color:var(--red);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{color:var(--muted);font-size:13px}
 
-    /* Grid layout stream cards */
-    .stream-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 12px;
-    }
+/* Force play */
+#playOverlay{position:absolute;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(4px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;cursor:pointer;z-index:15}
+#playOverlay.hidden{display:none}
+.play-ring{width:80px;height:80px;border-radius:50%;border:2.5px solid var(--red);background:rgba(254,44,85,.15);display:flex;align-items:center;justify-content:center;transition:transform .2s,background .2s}
+#playOverlay:hover .play-ring{transform:scale(1.08);background:rgba(254,44,85,.3)}
+.play-ring svg{margin-left:4px}
+.play-label{font-size:15px;font-weight:800}
+.play-sub{font-size:12px;color:var(--muted)}
 
-    .stream-card {
-      position: relative; border-radius: 14px; overflow: hidden;
-      aspect-ratio: 9/16; background: #111;
-      cursor: pointer; transition: transform .2s, box-shadow .2s;
-      border: 1.5px solid rgba(255,255,255,0.08);
-    }
-    .stream-card:hover { transform: scale(1.03); box-shadow: 0 8px 30px rgba(254,44,85,.3); border-color: var(--primary); }
-    .stream-card:active { transform: scale(.98); }
+/* Ended */
+#endedOverlay{position:absolute;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:25}
+#endedOverlay.hidden{display:none}
+.btn-back-live{background:var(--red);color:#fff;border:none;padding:12px 26px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
 
-    .card-thumb {
-      width: 100%; height: 100%;
-      background: linear-gradient(135deg, #1a0a18 0%, #0a1020 100%);
-      display: flex; align-items: center; justify-content: center;
-    }
-    .card-thumb svg { opacity: .2; }
-    .card-grad {
-      position: absolute; bottom: 0; left: 0; right: 0; height: 70%;
-      background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 100%);
-    }
-    .card-live {
-      position: absolute; top: 8px; left: 8px;
-      background: var(--primary); color: #fff; font-size: 10px; font-weight: 800;
-      padding: 2px 8px; border-radius: 4px; letter-spacing: .8px;
-    }
-    .card-viewers {
-      position: absolute; top: 8px; right: 8px;
-      background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);
-      color: #fff; font-size: 11px; font-weight: 600;
-      padding: 2px 7px; border-radius: 10px;
-    }
-    .card-info {
-      position: absolute; bottom: 10px; left: 10px; right: 10px;
-    }
-    .card-title { font-size: 13px; font-weight: 700; line-height: 1.3; margin-bottom: 3px; }
-    .card-host { font-size: 11px; color: rgba(255,255,255,0.7); }
+/* Top bar */
+.w-top-bar{position:absolute;top:0;left:0;right:0;z-index:10;padding:12px 14px;display:flex;align-items:center;justify-content:space-between}
+.w-top-left{display:flex;align-items:center;gap:9px;min-width:0}
+.host-ava{width:36px;height:36px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,var(--red),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;border:2px solid #fff}
+.w-host-info{display:flex;flex-direction:column;gap:1px;min-width:0}
+.w-host-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.w-live-badge{background:var(--red);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:3px;width:fit-content;letter-spacing:.5px}
+.w-viewer-pill{background:rgba(0,0,0,.5);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);padding:4px 9px;border-radius:20px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;flex-shrink:0}
+.btn-close{background:rgba(0,0,0,.55);backdrop-filter:blur(8px);border:1.5px solid rgba(255,255,255,.2);color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s;flex-shrink:0}
+.btn-close:hover{background:rgba(254,44,85,.5)}
 
-    .empty-disc {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 12px; padding: 60px 20px;
-      color: var(--muted); text-align: center;
-    }
-    .empty-disc svg { opacity: .25; }
+/* Stream info */
+.w-stream-info{position:absolute;bottom:200px;left:12px;right:70px;z-index:10}
+.w-stream-title{font-size:13px;font-weight:700;margin-bottom:2px;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+.w-stream-host{font-size:11px;color:rgba(255,255,255,.75)}
 
-    /* ─── JOIN MODAL ─── */
-    .modal-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
-      z-index: 100; display: flex; align-items: flex-end; justify-content: center;
-      padding: 0;
-    }
-    .modal-overlay.hidden { display: none; }
-    .modal {
-      background: #1a1a26; border-radius: 24px 24px 0 0;
-      padding: 24px 24px 36px; width: 100%; max-width: 480px;
-      display: flex; flex-direction: column; gap: 18px;
-      animation: slideUp .25s ease;
-    }
-    @keyframes slideUp { from { transform: translateY(60px); opacity:0; } to { transform: translateY(0); opacity:1; } }
-    .modal-handle { width: 40px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); margin: 0 auto -6px; }
-    .modal h3 { font-size: 18px; font-weight: 800; text-align: center; }
-    .modal .modal-desc { font-size: 14px; color: var(--muted); text-align: center; margin-top: -10px; }
+/* Right action bar */
+.w-right-bar{position:absolute;right:9px;bottom:200px;z-index:10;display:flex;flex-direction:column;align-items:center;gap:18px}
+.w-action-btn{display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer}
+.w-action-icon{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:21px;transition:transform .15s}
+.w-action-btn:active .w-action-icon{transform:scale(.85)}
+.w-action-label{font-size:9px;color:rgba(255,255,255,.8);font-weight:500}
 
-    .field label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 7px; }
-    .field input {
-      width: 100%; background: rgba(255,255,255,0.07); border: 1.5px solid rgba(255,255,255,0.12);
-      color: #fff; border-radius: 12px; padding: 13px 16px; font-size: 15px; outline: none;
-      transition: border-color .2s;
-    }
-    .field input:focus { border-color: var(--primary); }
-    .field input::placeholder { color: rgba(255,255,255,0.3); }
+/* Co-host join btn */
+.w-cohost-btn{
+  background:linear-gradient(135deg,var(--purple),#6e3ccf);color:#fff;
+  border:none;padding:0;border-radius:50%;width:48px;height:48px;
+  display:flex;align-items:center;justify-content:center;font-size:21px;
+  cursor:pointer;transition:transform .15s;
+}
+.w-cohost-btn:active{transform:scale(.85)}
+.w-cohost-btn.active{background:linear-gradient(135deg,#c9003c,var(--red));font-size:18px}
 
-    .modal-btns { display: flex; gap: 10px; }
-    .btn { flex: 1; padding: 14px; border-radius: 12px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 50px; transition: all .2s; }
-    .btn-watch { background: var(--primary); color: #fff; }
-    .btn-watch:hover { background: #c9003c; }
-    .btn-cancel { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); }
+/* Co-host controls (visible when co-hosting) */
+#cohostControls{
+  position:absolute;bottom:200px;left:9px;z-index:10;
+  display:none;flex-direction:column;gap:10px;align-items:center;
+}
+#cohostControls.show{display:flex}
+.co-ctrl-btn{width:40px;height:40px;border-radius:50%;border:1.5px solid rgba(255,255,255,.25);background:rgba(0,0,0,.6);backdrop-filter:blur(8px);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.co-ctrl-btn:active{transform:scale(.85)}
+.co-ctrl-btn.muted{background:rgba(254,44,85,.5);border-color:var(--red)}
 
-    /* ─── WATCH SCREEN ─── */
-    #watchScreen {
-      background: #000;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
+/* Heart anim */
+.heart-anim{position:absolute;bottom:200px;right:22px;z-index:11;pointer-events:none}
+.heart-float{position:absolute;font-size:20px;animation:floatHeart 1.2s ease forwards}
+@keyframes floatHeart{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-85px) scale(1.4)}}
 
-    /* Full-screen vertical video container */
-    .watch-container {
-      position: relative; width: 100%; height: 100%;
-      max-width: calc(100vh * 9 / 16);
-      overflow: hidden; background: #000;
-    }
+/* Chat overlay */
+.w-chat-area{
+  position:absolute;bottom:95px;left:0;right:66px;z-index:10;
+  max-height:200px;overflow:hidden;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 30%);
+  mask-image:linear-gradient(to bottom,transparent 0%,black 30%);
+}
+.w-chat-scroll{
+  overflow-y:auto;padding:0 12px 4px;display:flex;flex-direction:column;gap:5px;
+  scroll-behavior:smooth;
+}
+.w-chat-scroll::-webkit-scrollbar{width:2px}
+.w-chat-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:1px}
+.w-msg{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:4px;background:rgba(0,0,0,.4);backdrop-filter:blur(6px);border-radius:18px;padding:5px 11px;max-width:fit-content;animation:msgPop .2s ease}
+@keyframes msgPop{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+.w-msg .cn{font-size:12px;font-weight:700;margin-right:2px}
+.w-msg .cn.host{color:var(--yellow)}
+.w-msg .cn.viewer{color:var(--cyan)}
+.w-msg .cn.cohost{color:var(--purple)}
+.w-msg .ct{font-size:12px;color:#fff;word-break:break-word}
+#wNewMsg{
+  position:absolute;bottom:2px;left:50%;transform:translateX(-50%);
+  background:var(--red);color:#fff;font-size:10px;font-weight:700;
+  padding:3px 12px;border-radius:20px;cursor:pointer;display:none;white-space:nowrap;
+}
 
-    #remoteVideo {
-      position: absolute; inset: 0; width: 100%; height: 100%;
-      object-fit: cover; display: block; background: #000;
-    }
+/* Chat input */
+.w-chat-bar{position:absolute;bottom:0;left:0;right:0;z-index:10;padding:7px 10px 18px;display:flex;gap:7px;align-items:center;background:linear-gradient(to top,rgba(0,0,0,.8),transparent)}
+.w-chat-input{flex:1;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);border:1.5px solid rgba(255,255,255,.2);color:#fff;border-radius:22px;padding:9px 14px;font-size:13px;outline:none;transition:border-color .2s;min-height:42px}
+.w-chat-input:focus{border-color:rgba(255,255,255,.5)}
+.w-chat-input::placeholder{color:rgba(255,255,255,.4)}
+.w-send-btn{width:42px;height:42px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s;flex-shrink:0}
+.w-send-btn:hover{transform:scale(1.1)}
 
-    /* Gradient overlays */
-    .w-grad-top {
-      position: absolute; top: 0; left: 0; right: 0; height: 160px;
-      background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
-      pointer-events: none; z-index: 2;
-    }
-    .w-grad-bottom {
-      position: absolute; bottom: 0; left: 0; right: 0; height: 60%;
-      background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.4) 50%, transparent 100%);
-      pointer-events: none; z-index: 2;
-    }
+/* Co-host pending */
+#cohostPendingBadge{
+  position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  background:var(--purple);color:#fff;font-size:11px;font-weight:700;
+  padding:5px 16px;border-radius:20px;z-index:30;
+  display:none;animation:pulse 1.2s infinite;white-space:nowrap;
+}
+#cohostPendingBadge.show{display:block}
 
-    /* Loading overlay */
-    #loadingOverlay {
-      position: absolute; inset: 0; background: #000;
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 20;
-    }
-    #loadingOverlay.hidden { display: none; }
-    .spinner { width: 44px; height: 44px; border: 3px solid rgba(255,255,255,.1); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-text { color: var(--muted); font-size: 14px; }
-
-    /* Force Play Overlay */
-    #playOverlay {
-      position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px);
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-      cursor: pointer; z-index: 15;
-    }
-    #playOverlay.hidden { display: none; }
-    .play-ring {
-      width: 84px; height: 84px; border-radius: 50%;
-      border: 2.5px solid var(--primary); background: rgba(254,44,85,0.15);
-      display: flex; align-items: center; justify-content: center;
-      transition: transform .2s, background .2s;
-    }
-    #playOverlay:hover .play-ring { transform: scale(1.08); background: rgba(254,44,85,0.3); }
-    .play-ring svg { margin-left: 4px; }
-    .play-label { font-size: 16px; font-weight: 800; }
-    .play-sub { font-size: 13px; color: var(--muted); }
-
-    /* Stream Ended Overlay */
-    #endedOverlay {
-      position: absolute; inset: 0; background: rgba(0,0,0,0.92);
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; z-index: 25;
-    }
-    #endedOverlay.hidden { display: none; }
-    .ended-emoji { font-size: 52px; }
-    .btn-back-live { background: var(--primary); color: #fff; border: none; padding: 13px 28px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; }
-
-    /* Top bar */
-    .w-top-bar {
-      position: absolute; top: 0; left: 0; right: 0; z-index: 10;
-      padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;
-    }
-    .w-top-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-    .host-ava {
-      width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px; font-weight: 800; border: 2px solid #fff;
-    }
-    .w-host-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-    .w-host-name { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .w-live-badge { background: var(--primary); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; width: fit-content; }
-    .w-viewer-pill {
-      background: rgba(0,0,0,0.5); backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.15);
-      padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
-      display: flex; align-items: center; gap: 5px; flex-shrink: 0;
-    }
-    .btn-close {
-      background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
-      border: 1.5px solid rgba(255,255,255,0.2); color: #fff;
-      width: 36px; height: 36px; border-radius: 50%; font-size: 18px;
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-      transition: background .2s; flex-shrink: 0;
-    }
-    .btn-close:hover { background: rgba(254,44,85,.5); }
-
-    /* Stream info bottom */
-    .w-stream-info {
-      position: absolute; bottom: 170px; left: 14px; right: 72px; z-index: 10;
-    }
-    .w-stream-title { font-size: 14px; font-weight: 700; margin-bottom: 3px; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
-    .w-stream-host { font-size: 12px; color: rgba(255,255,255,0.75); }
-
-    /* Right action bar (TikTok style) */
-    .w-right-bar {
-      position: absolute; right: 10px; bottom: 180px; z-index: 10;
-      display: flex; flex-direction: column; align-items: center; gap: 22px;
-    }
-    .w-action-btn {
-      display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer;
-    }
-    .w-action-icon {
-      width: 50px; height: 50px; border-radius: 50%;
-      background: rgba(255,255,255,0.15); backdrop-filter: blur(8px);
-      border: 1.5px solid rgba(255,255,255,0.2);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px; transition: transform .15s;
-    }
-    .w-action-btn:active .w-action-icon { transform: scale(.88); }
-    .w-action-label { font-size: 10px; color: rgba(255,255,255,0.8); font-weight: 500; }
-
-    /* Heart animation */
-    .heart-anim {
-      position: absolute; bottom: 200px; right: 22px; z-index: 11;
-      pointer-events: none;
-    }
-    .heart-float {
-      position: absolute; font-size: 20px; animation: floatHeart 1.2s ease forwards;
-    }
-    @keyframes floatHeart {
-      0% { opacity: 1; transform: translateY(0) scale(1); }
-      100% { opacity: 0; transform: translateY(-80px) scale(1.4); }
-    }
-
-    /* Chat overlay (TikTok style) */
-    .w-chat-area {
-      position: absolute; bottom: 92px; left: 0; right: 68px; z-index: 10;
-      max-height: 220px; overflow: hidden;
-      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 30%);
-      mask-image: linear-gradient(to bottom, transparent 0%, black 30%);
-    }
-    .w-chat-scroll {
-      overflow-y: auto; padding: 0 12px 4px;
-      display: flex; flex-direction: column; gap: 6px;
-    }
-    .w-chat-scroll::-webkit-scrollbar { display: none; }
-
-    .w-msg {
-      display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px;
-      background: rgba(0,0,0,0.38); backdrop-filter: blur(6px);
-      border-radius: 20px; padding: 6px 12px;
-      max-width: fit-content;
-      animation: msgPop .2s ease;
-    }
-    @keyframes msgPop { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-    .w-msg .cn { font-size: 13px; font-weight: 700; margin-right: 2px; }
-    .w-msg .cn.host { color: var(--yellow); }
-    .w-msg .cn.viewer { color: var(--accent); }
-    .w-msg .ct { font-size: 13px; color: #fff; word-break: break-word; }
-
-    /* Chat input bar */
-    .w-chat-bar {
-      position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
-      padding: 8px 12px 20px;
-      display: flex; gap: 8px; align-items: center;
-      background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);
-    }
-    .w-chat-input {
-      flex: 1; background: rgba(255,255,255,0.12); backdrop-filter: blur(8px);
-      border: 1.5px solid rgba(255,255,255,0.2); color: #fff;
-      border-radius: 24px; padding: 10px 16px; font-size: 14px; outline: none;
-      transition: border-color .2s; min-height: 44px;
-    }
-    .w-chat-input:focus { border-color: rgba(255,255,255,0.5); }
-    .w-chat-input::placeholder { color: rgba(255,255,255,0.4); }
-    .w-send-btn {
-      width: 44px; height: 44px; border-radius: 50%; border: none;
-      background: var(--primary); color: #fff; font-size: 18px;
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-      transition: transform .15s; flex-shrink: 0;
-    }
-    .w-send-btn:hover { transform: scale(1.1); }
-
-    /* ── Toast ── */
-    .toast {
-      position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,.85); backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.15); color: #fff;
-      padding: 10px 20px; border-radius: 24px; font-size: 13px; font-weight: 500;
-      opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999;
-      white-space: nowrap;
-    }
-    .toast.show { opacity: 1; }
-    .toast.success { border-color: var(--green); color: var(--green); }
-    .toast.error { border-color: var(--primary); color: var(--primary); }
-  </style>
+/* Toast */
+.toast{position:fixed;top:56px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.15);color:#fff;padding:9px 20px;border-radius:22px;font-size:12px;font-weight:500;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1}
+.toast.success{border-color:var(--green);color:var(--green)}
+.toast.error{border-color:var(--red);color:var(--red)}
+</style>
 </head>
 <body>
 
-<!-- ─── DISCOVER SCREEN ────────────────────────────────────────────────── -->
+<!-- ─── DISCOVER ───────────────────────────────────────────────────────────── -->
 <div class="screen active" id="discoverScreen">
-
   <div class="disc-header">
-    <div class="logo">
-      <div class="logo-dot"></div>
-      LiveStream
-    </div>
+    <div class="logo"><div class="logo-dot"></div>LiveStream</div>
     <button class="btn-refresh" onclick="loadStreams()">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-      </svg>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
       Refresh
     </button>
   </div>
-
   <div class="disc-body">
-    <h2>Live Sekarang 🔴</h2>
-    <p class="disc-sub">Pilih stream untuk ditonton</p>
-
+    <h2>🔴 Live Sekarang</h2>
+    <p class="disc-sub">Pilih stream untuk ditonton atau join co-host</p>
     <div class="stream-grid" id="streamGrid">
-      <div class="empty-disc" style="grid-column:1/-1">
-        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5">
-          <path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/>
-        </svg>
+      <div class="empty-disc">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/></svg>
         <p>Belum ada stream aktif</p>
-        <small style="font-size:12px">Klik Refresh untuk memperbarui</small>
+        <small style="font-size:11px">Klik Refresh untuk memperbarui</small>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ─── JOIN MODAL ─────────────────────────────────────────────────────── -->
+<!-- ─── JOIN MODAL ─────────────────────────────────────────────────────────── -->
 <div class="modal-overlay hidden" id="joinModal">
   <div class="modal">
     <div class="modal-handle"></div>
@@ -379,7 +244,7 @@
     <div class="field">
       <label>Nama kamu</label>
       <input type="text" id="viewerNameInput" placeholder="Nama penonton..." maxlength="30"
-             onkeydown="if(event.key==='Enter')confirmJoin()" />
+             onkeydown="if(event.key==='Enter')confirmJoin()"/>
     </div>
     <div class="modal-btns">
       <button class="btn btn-cancel" onclick="closeJoinModal()">Batal</button>
@@ -388,39 +253,48 @@
   </div>
 </div>
 
-<!-- ─── WATCH SCREEN ──────────────────────────────────────────────────── -->
+<!-- ─── WATCH SCREEN ───────────────────────────────────────────────────────── -->
 <div class="screen" id="watchScreen">
   <div class="watch-container">
 
-    <!-- Video -->
+    <!-- Main video (from host) -->
     <video id="remoteVideo" autoplay playsinline muted></video>
 
-    <!-- Gradients -->
+    <!-- Co-host grid (me + host, bidirectional) -->
+    <div id="coGrid">
+      <div class="co-cell">
+        <video id="coLocalVideo" autoplay playsinline muted></video>
+        <div class="co-label me">Saya</div>
+      </div>
+      <div class="co-cell">
+        <video id="coRemoteVideo" autoplay playsinline muted></video>
+        <div class="co-label host">Host</div>
+      </div>
+    </div>
+
     <div class="w-grad-top"></div>
     <div class="w-grad-bottom"></div>
 
     <!-- Loading -->
-    <div id="loadingOverlay">
-      <div class="spinner"></div>
-      <div class="loading-text">Menghubungkan ke stream...</div>
-    </div>
+    <div id="loadingOverlay"><div class="spinner"></div><div class="loading-text">Menghubungkan...</div></div>
 
-    <!-- Force Play -->
+    <!-- Force play -->
     <div id="playOverlay" class="hidden" onclick="forcePlay()">
-      <div class="play-ring">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="var(--primary)"><polygon points="5,3 19,12 5,21"/></svg>
-      </div>
+      <div class="play-ring"><svg width="32" height="32" viewBox="0 0 24 24" fill="var(--red)"><polygon points="5,3 19,12 5,21"/></svg></div>
       <div class="play-label">KLIK UNTUK AKTIFKAN LIVE</div>
       <div class="play-sub">Tap untuk memutar video</div>
     </div>
 
-    <!-- Stream Ended -->
+    <!-- Stream ended -->
     <div id="endedOverlay" class="hidden">
-      <div class="ended-emoji">📵</div>
-      <h3 style="font-size:20px;font-weight:800">Stream Berakhir</h3>
-      <p style="color:rgba(255,255,255,0.6);font-size:14px">Host telah mengakhiri siaran.</p>
+      <div style="font-size:50px">📵</div>
+      <h3 style="font-size:19px;font-weight:800">Stream Berakhir</h3>
+      <p style="color:rgba(255,255,255,.6);font-size:13px">Host telah mengakhiri siaran.</p>
       <button class="btn-back-live" onclick="backToDiscover()">Lihat Stream Lain</button>
     </div>
+
+    <!-- Co-host pending -->
+    <div id="cohostPendingBadge">⏳ Menunggu izin host...</div>
 
     <!-- Top bar -->
     <div class="w-top-bar">
@@ -431,11 +305,8 @@
           <div class="w-live-badge">● LIVE</div>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div class="w-viewer-pill">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-          <span id="watchViewers">0</span>
-        </div>
+      <div style="display:flex;align-items:center;gap:7px">
+        <div class="w-viewer-pill">👁 <span id="watchViewers">0</span></div>
         <button class="btn-close" onclick="backToDiscover()">✕</button>
       </div>
     </div>
@@ -446,11 +317,23 @@
       <div class="w-stream-host" id="watchSubHost">—</div>
     </div>
 
+    <!-- Co-host controls (left side, visible when co-hosting) -->
+    <div id="cohostControls">
+      <button class="co-ctrl-btn" id="coMicBtn" onclick="toggleCoMic()" title="Mic">🎙️</button>
+      <button class="co-ctrl-btn" id="coCamBtn" onclick="toggleCoCam()" title="Kamera">📷</button>
+      <button class="co-ctrl-btn" onclick="leaveCohost()" style="background:rgba(254,44,85,.6);border-color:var(--red);font-size:14px;font-weight:700">✕</button>
+    </div>
+
     <!-- Right action bar -->
     <div class="w-right-bar">
       <div class="w-action-btn" onclick="sendHeart()">
         <div class="w-action-icon" id="heartBtn">❤️</div>
         <span class="w-action-label" id="heartCount">0</span>
+      </div>
+      <!-- Co-host join button -->
+      <div class="w-action-btn" id="cohostBtnWrap">
+        <button class="w-cohost-btn" id="cohostJoinBtn" onclick="requestCohost()" title="Join Co-host">🎙</button>
+        <span class="w-action-label">Co-host</span>
       </div>
       <div class="w-action-btn" onclick="focusChat()">
         <div class="w-action-icon">💬</div>
@@ -458,22 +341,23 @@
       </div>
     </div>
 
-    <!-- Heart animation container -->
+    <!-- Heart animation -->
     <div class="heart-anim" id="heartAnim"></div>
 
     <!-- Chat overlay -->
     <div class="w-chat-area">
       <div class="w-chat-scroll" id="wChatScroll">
-        <div class="w-msg"><span class="ct" style="color:rgba(255,255,255,0.5)">Bergabung dan mulai chat! 👋</span></div>
+        <div class="w-msg"><span class="ct" style="color:rgba(255,255,255,.5)">Bergabung dan mulai chat! 👋</span></div>
       </div>
+      <div id="wNewMsg" onclick="wScrollBottom()">▼ Pesan baru</div>
     </div>
 
-    <!-- Chat input bar -->
+    <!-- Chat input -->
     <div class="w-chat-bar">
       <input type="text" class="w-chat-input" id="wChatInput" placeholder="Tulis pesan..." maxlength="200"
-             onkeydown="if(event.key==='Enter')sendChat()" />
+             onkeydown="if(event.key==='Enter')sendChat()"/>
       <button class="w-send-btn" onclick="sendChat()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
     </div>
 
@@ -488,274 +372,359 @@ const socket = io();
 let currentStreamId = null;
 let myName = 'Penonton';
 let hostSocketId = null;
-let pc = null;
-let videoUnlocked = false;
+let pc = null;         // viewer PC (host → viewer)
+let cohostPC = null;   // co-host PC (bidirectional)
+let localCohostStream = null;
+let isCohost = false;
+let cohostPending = false;
+let cohostMicOn = true, cohostCamOn = true;
 let heartTotal = 0;
+let chatAtBottom = true;
 
-const ICE_CONFIG = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:global.stun.twilio.com:3478' },
-    { urls: 'stun:stun.services.mozilla.com' }
+const ICE = {
+  iceServers:[
+    {urls:'stun:stun.l.google.com:19302'},
+    {urls:'stun:stun1.l.google.com:19302'},
+    {urls:'stun:stun2.l.google.com:19302'},
+    {urls:'stun:stun3.l.google.com:19302'},
+    {urls:'stun:stun4.l.google.com:19302'},
+    {urls:'stun:global.stun.twilio.com:3478'},
+    {urls:'stun:stun.services.mozilla.com'},
+    {urls:'stun:stun.stunprotocol.org:3478'},
+    {urls:'stun:stun.voip.blackberry.com:3478'},
   ],
-  sdpSemantics: 'unified-plan',
-  iceCandidatePoolSize: 10
+  sdpSemantics:'unified-plan',
+  iceCandidatePoolSize:12,
+  bundlePolicy:'max-bundle',
+  rtcpMuxPolicy:'require'
 };
 
-// ── Discovery ──────────────────────────────────────────────────────────────
-function loadStreams() { socket.emit('get:streams'); }
+// ── Discovery ────────────────────────────────────────────────────────────────
+function loadStreams(){socket.emit('get:streams')}
 
-function renderStreams(list) {
-  const grid = document.getElementById('streamGrid');
-  if (!list.length) {
-    grid.innerHTML = `
-      <div class="empty-disc" style="grid-column:1/-1">
-        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1.5">
-          <path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/>
-        </svg>
-        <p>Belum ada stream aktif</p>
-        <small style="font-size:12px">Klik Refresh untuk memperbarui</small>
-      </div>`;
+function renderStreams(list){
+  const grid=document.getElementById('streamGrid');
+  if(!list.length){
+    grid.innerHTML=`<div class="empty-disc">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/></svg>
+      <p>Belum ada stream aktif</p><small style="font-size:11px">Klik Refresh</small></div>`;
     return;
   }
-  grid.innerHTML = '';
-  list.forEach(s => {
-    const card = document.createElement('div');
-    card.className = 'stream-card';
-    card.innerHTML = `
-      <div class="card-thumb">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5">
-          <path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/>
-        </svg>
-      </div>
+  grid.innerHTML='';
+  list.forEach(s=>{
+    const card=document.createElement('div');
+    card.className='stream-card';
+    card.innerHTML=`
+      <div class="card-thumb"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M4 8a2 2 0 012-2h9a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"/></svg></div>
       <div class="card-grad"></div>
       <div class="card-live">LIVE</div>
       <div class="card-viewers">👁 ${s.viewerCount}</div>
-      <div class="card-info">
-        <div class="card-title">${escHtml(s.title)}</div>
-        <div class="card-host">@${escHtml(s.hostName)}</div>
-      </div>
-    `;
-    card.onclick = () => openJoinModal(s);
+      <div class="card-info"><div class="card-title">${esc(s.title)}</div><div class="card-host">@${esc(s.hostName)}</div></div>`;
+    card.onclick=()=>openJoinModal(s);
     grid.appendChild(card);
   });
 }
 
-function formatAgo(ts) {
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60) return s + 'd lalu';
-  const m = Math.floor(s / 60);
-  return m < 60 ? m + 'm lalu' : Math.floor(m / 60) + 'j lalu';
-}
-
-// ── Join Modal ─────────────────────────────────────────────────────────────
-let pendingStream = null;
-function openJoinModal(data) {
-  pendingStream = data;
-  document.getElementById('joinModalDesc').textContent = '"' + data.title + '" oleh ' + data.hostName;
+// ── Join Modal ────────────────────────────────────────────────────────────────
+let pendingStream=null;
+function openJoinModal(data){
+  pendingStream=data;
+  document.getElementById('joinModalDesc').textContent='"'+data.title+'" oleh '+data.hostName;
   document.getElementById('joinModal').classList.remove('hidden');
-  setTimeout(() => document.getElementById('viewerNameInput').focus(), 150);
+  setTimeout(()=>document.getElementById('viewerNameInput').focus(),150);
 }
-function closeJoinModal() {
-  document.getElementById('joinModal').classList.add('hidden');
-  pendingStream = null;
-}
-function confirmJoin() {
-  const name = document.getElementById('viewerNameInput').value.trim();
-  if (!name) { document.getElementById('viewerNameInput').focus(); return; }
-  myName = name;
-  joinStream(pendingStream);
-  closeJoinModal();
+function closeJoinModal(){document.getElementById('joinModal').classList.add('hidden');pendingStream=null}
+function confirmJoin(){
+  const n=document.getElementById('viewerNameInput').value.trim();
+  if(!n){document.getElementById('viewerNameInput').focus();return}
+  myName=n;joinStream(pendingStream);closeJoinModal();
 }
 
-// ── Join Stream ────────────────────────────────────────────────────────────
-function joinStream(data) {
-  currentStreamId = data.streamId;
-  // Update UI
-  document.getElementById('watchTitle').textContent = data.title;
-  document.getElementById('watchHostName').textContent = data.hostName;
-  document.getElementById('watchSubHost').textContent = 'oleh ' + data.hostName;
-  document.getElementById('watchHostAva').textContent = data.hostName.charAt(0).toUpperCase();
-  document.getElementById('watchViewers').textContent = data.viewerCount;
-  // Reset states
-  heartTotal = 0;
-  document.getElementById('heartCount').textContent = '0';
-  document.getElementById('wChatScroll').innerHTML = '<div class="w-msg"><span class="ct" style="color:rgba(255,255,255,0.5)">Bergabung dan mulai chat! 👋</span></div>';
-  // Switch screen
+// ── Join Stream ────────────────────────────────────────────────────────────────
+function joinStream(data){
+  currentStreamId=data.streamId;
+  document.getElementById('watchTitle').textContent=data.title;
+  document.getElementById('watchHostName').textContent=data.hostName;
+  document.getElementById('watchSubHost').textContent='oleh '+data.hostName;
+  document.getElementById('watchHostAva').textContent=data.hostName.charAt(0).toUpperCase();
+  document.getElementById('watchViewers').textContent=data.viewerCount;
+  heartTotal=0;document.getElementById('heartCount').textContent='0';
+  document.getElementById('wChatScroll').innerHTML='<div class="w-msg"><span class="ct" style="color:rgba(255,255,255,.5)">Bergabung dan mulai chat! 👋</span></div>';
+  resetCohostUI();
   showScreen('watchScreen');
   document.getElementById('loadingOverlay').classList.remove('hidden');
   document.getElementById('playOverlay').classList.add('hidden');
   document.getElementById('endedOverlay').classList.add('hidden');
-  socket.emit('viewer:join', { streamId: currentStreamId, viewerName: myName });
+  socket.emit('viewer:join',{streamId:currentStreamId,viewerName:myName});
 }
 
-// ── WebRTC ─────────────────────────────────────────────────────────────────
-async function handleOffer(fromId, offer) {
-  hostSocketId = fromId;
-  if (pc) { pc.close(); pc = null; }
-  pc = new RTCPeerConnection(ICE_CONFIG);
+// ── WebRTC: Viewer (receive host stream) ──────────────────────────────────────
+async function handleViewerOffer(fromId, offer){
+  hostSocketId=fromId;
+  if(pc){pc.close();pc=null}
+  pc=new RTCPeerConnection(ICE);
 
-  pc.ontrack = (event) => {
-    const video = document.getElementById('remoteVideo');
-    if (event.streams && event.streams[0]) {
-      video.srcObject = event.streams[0];
-    } else {
-      const ms = video.srcObject || new MediaStream();
-      ms.addTrack(event.track);
-      video.srcObject = ms;
-    }
+  pc.ontrack=e=>{
+    const video=document.getElementById('remoteVideo');
+    if(e.streams?.[0]) video.srcObject=e.streams[0];
+    else { const ms=video.srcObject||new MediaStream(); ms.addTrack(e.track); video.srcObject=ms; }
     document.getElementById('loadingOverlay').classList.add('hidden');
-    video.play().then(() => {
-      videoUnlocked = true;
-      video.muted = false;
-      document.getElementById('playOverlay').classList.add('hidden');
-    }).catch(() => {
-      document.getElementById('playOverlay').classList.remove('hidden');
-    });
+    video.play().then(()=>{video.muted=false;document.getElementById('playOverlay').classList.add('hidden')})
+               .catch(()=>document.getElementById('playOverlay').classList.remove('hidden'));
+    // Also mirror to co-grid remote
+    if(isCohost) document.getElementById('coRemoteVideo').srcObject=video.srcObject;
   };
 
-  pc.onicecandidate = (e) => {
-    if (e.candidate) socket.emit('rtc:ice', { targetId: fromId, candidate: e.candidate });
-  };
-
-  pc.oniceconnectionstatechange = () => {
-    if (pc.iceConnectionState === 'failed') pc.restartIce();
-    if (pc.iceConnectionState === 'disconnected') showToast('Koneksi tidak stabil...', 'error');
-    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+  pc.onicecandidate=e=>{if(e.candidate)socket.emit('rtc:ice',{targetId:fromId,candidate:e.candidate,label:'viewer'})};
+  pc.oniceconnectionstatechange=()=>{
+    if(pc.iceConnectionState==='failed') pc.restartIce();
+    if(pc.iceConnectionState==='disconnected') showToast('Koneksi tidak stabil...','error');
+    if(pc.iceConnectionState==='connected'||pc.iceConnectionState==='completed')
       document.getElementById('loadingOverlay').classList.add('hidden');
-    }
   };
 
   try {
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
+    const answer=await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    socket.emit('rtc:answer', { targetId: fromId, answer: pc.localDescription });
-  } catch(e) { console.error('[OFFER/ANSWER]', e); showToast('Gagal koneksi WebRTC', 'error'); }
+    socket.emit('rtc:answer',{targetId:fromId,answer:pc.localDescription,label:'viewer'});
+  } catch(e){console.error('[VIEWER OFFER]',e);showToast('Gagal koneksi video','error')}
 }
 
-function forcePlay() {
-  const video = document.getElementById('remoteVideo');
-  video.muted = false;
-  video.play().then(() => {
-    videoUnlocked = true;
-    document.getElementById('playOverlay').classList.add('hidden');
-  }).catch(() => {
-    video.muted = true;
-    video.play().then(() => {
-      document.getElementById('playOverlay').classList.add('hidden');
-      showToast('Video aktif (suara mute)', 'error');
+// ── Co-host: Request ──────────────────────────────────────────────────────────
+async function requestCohost(){
+  if(isCohost){leaveCohost();return}
+  if(cohostPending){showToast('Sudah menunggu izin host...');return}
+  try {
+    localCohostStream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'user',width:{ideal:640},height:{ideal:960}},
+      audio:{echoCancellation:true,noiseSuppression:true}
     });
-  });
+    document.getElementById('coLocalVideo').srcObject=localCohostStream;
+    document.getElementById('coLocalVideo').play().catch(()=>{});
+  } catch(e){showToast('Gagal akses kamera: '+e.message,'error');return}
+  cohostPending=true;
+  document.getElementById('cohostPendingBadge').classList.add('show');
+  document.getElementById('cohostJoinBtn').classList.add('active');
+  socket.emit('cohost:request',{streamId:currentStreamId});
+  showToast('Permintaan co-host dikirim...');
 }
 
-function backToDiscover() {
-  if (pc) { pc.close(); pc = null; }
-  document.getElementById('remoteVideo').srcObject = null;
-  currentStreamId = null; videoUnlocked = false;
+// ── Co-host: Accepted — build bidirectional PC ────────────────────────────────
+async function startCohostPC(hostId){
+  cohostPending=false;isCohost=true;
+  document.getElementById('cohostPendingBadge').classList.remove('show');
+  document.getElementById('cohostControls').classList.add('show');
+  document.getElementById('cohostJoinBtn').classList.add('active');
+  document.getElementById('cohostJoinBtn').textContent='🔴';
+
+  // Show co-grid
+  document.getElementById('coGrid').classList.add('show');
+  // Mirror host stream to co-grid remote
+  const mainVid=document.getElementById('remoteVideo');
+  if(mainVid.srcObject) document.getElementById('coRemoteVideo').srcObject=mainVid.srcObject;
+  document.getElementById('coRemoteVideo').play().catch(()=>{});
+
+  showToast('Co-host diterima! 🎉','success');
+}
+
+// ── Co-host: Answer offer from host ──────────────────────────────────────────
+async function handleCohostOffer(fromId, offer){
+  if(cohostPC){cohostPC.close();cohostPC=null}
+  cohostPC=new RTCPeerConnection(ICE);
+
+  // Send local stream to host
+  if(localCohostStream) localCohostStream.getTracks().forEach(t=>cohostPC.addTrack(t,localCohostStream));
+
+  // Receive host stream (update remote video)
+  cohostPC.ontrack=e=>{
+    if(e.streams?.[0]){
+      document.getElementById('coRemoteVideo').srcObject=e.streams[0];
+      document.getElementById('coRemoteVideo').play().catch(()=>{});
+    }
+  };
+
+  cohostPC.onicecandidate=e=>{if(e.candidate)socket.emit('rtc:ice',{targetId:fromId,candidate:e.candidate,label:'cohost'})};
+  cohostPC.oniceconnectionstatechange=()=>{if(cohostPC.iceConnectionState==='failed')cohostPC.restartIce()};
+
+  try {
+    await cohostPC.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer=await cohostPC.createAnswer();
+    await cohostPC.setLocalDescription(answer);
+    socket.emit('rtc:answer',{targetId:fromId,answer:cohostPC.localDescription,label:'cohost'});
+  } catch(e){console.error('[COHOST OFFER]',e)}
+}
+
+// ── Co-host controls ──────────────────────────────────────────────────────────
+function toggleCoMic(){
+  cohostMicOn=!cohostMicOn;
+  localCohostStream?.getAudioTracks().forEach(t=>t.enabled=cohostMicOn);
+  const btn=document.getElementById('coMicBtn');
+  btn.textContent=cohostMicOn?'🎙️':'🔇';
+  btn.classList.toggle('muted',!cohostMicOn);
+}
+function toggleCoCam(){
+  cohostCamOn=!cohostCamOn;
+  localCohostStream?.getVideoTracks().forEach(t=>t.enabled=cohostCamOn);
+  const btn=document.getElementById('coCamBtn');
+  btn.textContent=cohostCamOn?'📷':'🚫';
+  btn.classList.toggle('muted',!cohostCamOn);
+}
+function leaveCohost(){
+  socket.emit('cohost:leave',{streamId:currentStreamId});
+  cleanupCohost();
+  showToast('Keluar dari co-host');
+}
+function cleanupCohost(){
+  isCohost=false;cohostPending=false;cohostMicOn=true;cohostCamOn=true;
+  localCohostStream?.getTracks().forEach(t=>t.stop()); localCohostStream=null;
+  if(cohostPC){cohostPC.close();cohostPC=null}
+  resetCohostUI();
+}
+function resetCohostUI(){
+  document.getElementById('coGrid').classList.remove('show');
+  document.getElementById('cohostControls').classList.remove('show');
+  document.getElementById('cohostPendingBadge').classList.remove('show');
+  document.getElementById('cohostJoinBtn').classList.remove('active');
+  document.getElementById('cohostJoinBtn').textContent='🎙';
+  document.getElementById('coMicBtn').textContent='🎙️';
+  document.getElementById('coCamBtn').textContent='📷';
+  document.getElementById('coLocalVideo').srcObject=null;
+  document.getElementById('coRemoteVideo').srcObject=null;
+}
+
+// ── Force play ────────────────────────────────────────────────────────────────
+function forcePlay(){
+  const v=document.getElementById('remoteVideo');
+  v.muted=false;
+  v.play().then(()=>document.getElementById('playOverlay').classList.add('hidden'))
+          .catch(()=>{v.muted=true;v.play().then(()=>{document.getElementById('playOverlay').classList.add('hidden');showToast('Video aktif (suara mute)','error')})});
+}
+
+function backToDiscover(){
+  if(pc){pc.close();pc=null}
+  cleanupCohost();
+  document.getElementById('remoteVideo').srcObject=null;
+  currentStreamId=null;hostSocketId=null;
   showScreen('discoverScreen');
   loadStreams();
 }
 
-// ── Chat ───────────────────────────────────────────────────────────────────
-function sendChat() {
-  const input = document.getElementById('wChatInput');
-  const msg = input.value.trim();
-  if (!msg || !currentStreamId) return;
-  socket.emit('chat:send', { streamId: currentStreamId, message: msg, name: myName, role: 'viewer' });
-  input.value = '';
+// ── Chat ──────────────────────────────────────────────────────────────────────
+function sendChat(){
+  const input=document.getElementById('wChatInput');
+  const msg=input.value.trim(); if(!msg||!currentStreamId) return;
+  socket.emit('chat:send',{streamId:currentStreamId,message:msg,name:myName,role:isCohost?'cohost':'viewer'});
+  input.value='';
 }
+function focusChat(){document.getElementById('wChatInput').focus()}
 
-function focusChat() { document.getElementById('wChatInput').focus(); }
-
-// ── FIX: Listener chat:message di sisi penonton ────────────────────────────
-function appendChat(data) {
-  const scroll = document.getElementById('wChatScroll');
-  const div = document.createElement('div');
-  div.className = 'w-msg';
-  div.innerHTML = `<span class="cn ${data.role}">${escHtml(data.name)}</span><span class="ct">${escHtml(data.message)}</span>`;
+function appendChat(data){
+  const scroll=document.getElementById('wChatScroll');
+  const wasBottom=scroll.scrollHeight-scroll.scrollTop-scroll.clientHeight<40;
+  const div=document.createElement('div');
+  div.className='w-msg';
+  div.innerHTML=`<span class="cn ${data.role}">${esc(data.name)}</span><span class="ct">${esc(data.message)}</span>`;
   scroll.appendChild(div);
-  while (scroll.children.length > 60) scroll.removeChild(scroll.firstChild);
-  scroll.scrollTop = scroll.scrollHeight;
+  while(scroll.children.length>80) scroll.removeChild(scroll.firstChild);
+  if(wasBottom||chatAtBottom) scroll.scrollTop=scroll.scrollHeight;
+  else document.getElementById('wNewMsg').style.display='block';
+}
+function wScrollBottom(){
+  const s=document.getElementById('wChatScroll');
+  s.scrollTop=s.scrollHeight;
+  document.getElementById('wNewMsg').style.display='none';
+  chatAtBottom=true;
 }
 
-// ── Heart ──────────────────────────────────────────────────────────────────
-function sendHeart() {
-  heartTotal++;
-  document.getElementById('heartCount').textContent = heartTotal;
-  spawnHeart();
-  // Send as chat notification
-  if (currentStreamId) {
-    socket.emit('chat:send', { streamId: currentStreamId, message: '❤️ mengirim hati!', name: myName, role: 'viewer' });
-  }
+// ── Heart ─────────────────────────────────────────────────────────────────────
+function sendHeart(){
+  heartTotal++;document.getElementById('heartCount').textContent=heartTotal;spawnHeart();
+  if(currentStreamId) socket.emit('chat:send',{streamId:currentStreamId,message:'❤️ mengirim hati!',name:myName,role:'viewer'});
+}
+function spawnHeart(){
+  const c=document.getElementById('heartAnim');
+  const h=document.createElement('div');
+  h.className='heart-float';h.textContent=['❤️','🧡','💛','💜','💙'][Math.floor(Math.random()*5)];
+  h.style.right=(Math.random()*10)+'px';
+  c.appendChild(h);setTimeout(()=>h.remove(),1300);
 }
 
-function spawnHeart() {
-  const container = document.getElementById('heartAnim');
-  const h = document.createElement('div');
-  h.className = 'heart-float';
-  h.textContent = ['❤️','🧡','💛','💜','💙'][Math.floor(Math.random()*5)];
-  h.style.right = (Math.random() * 10) + 'px';
-  container.appendChild(h);
-  setTimeout(() => h.remove(), 1300);
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+let toastT;
+function showToast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show'+(type?' '+type:'');
+  clearTimeout(toastT);toastT=setTimeout(()=>t.className='toast',3000);
 }
 
-// ── Utils ──────────────────────────────────────────────────────────────────
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-let toastTimer;
-function showToast(msg, type = '') {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.className = 'toast show' + (type ? ' ' + type : '');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = 'toast', 3000);
-}
-
-// ── Socket Events ──────────────────────────────────────────────────────────
-socket.on('streams:list', renderStreams);
-
-socket.on('rtc:offer', ({ from, offer }) => handleOffer(from, offer));
-
-socket.on('rtc:ice', async ({ from, candidate }) => {
-  if (!pc) return;
-  try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
+// ── Chat scroll listener ──────────────────────────────────────────────────────
+document.getElementById('wChatScroll').addEventListener('scroll',function(){
+  const isBottom=this.scrollHeight-this.scrollTop-this.clientHeight<40;
+  chatAtBottom=isBottom;
+  if(isBottom)document.getElementById('wNewMsg').style.display='none';
 });
 
-socket.on('viewer:count', ({ count }) => {
-  document.getElementById('watchViewers').textContent = count;
+// ── Socket Events ─────────────────────────────────────────────────────────────
+socket.on('streams:list',renderStreams);
+
+socket.on('rtc:offer',({from,offer,label})=>{
+  if(label==='viewer') handleViewerOffer(from,offer);
+  else if(label==='cohost') handleCohostOffer(from,offer);
 });
 
-// ── FIX: Chat dari host dan penonton lain tampil di layar penonton ──────────
-socket.on('chat:message', (data) => appendChat(data));
+socket.on('rtc:answer',async({from,answer,label})=>{
+  // viewers don't normally receive answers, but handle just in case
+});
 
-socket.on('stream:ended', () => {
+socket.on('rtc:ice',async({from,candidate,label})=>{
+  try {
+    if(label==='cohost'&&cohostPC) await cohostPC.addIceCandidate(new RTCIceCandidate(candidate));
+    else if(pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch(e){}
+});
+
+socket.on('viewer:count',({count})=>document.getElementById('watchViewers').textContent=count);
+
+// Co-host events
+socket.on('cohost:accepted',async({hostId,streamId})=>{
+  await startCohostPC(hostId);
+});
+
+socket.on('cohost:rejected',()=>{
+  cohostPending=false;
+  localCohostStream?.getTracks().forEach(t=>t.stop());localCohostStream=null;
+  document.getElementById('cohostPendingBadge').classList.remove('show');
+  document.getElementById('cohostJoinBtn').classList.remove('active');
+  showToast('Permintaan co-host ditolak','error');
+});
+
+socket.on('cohost:kicked',()=>{
+  cleanupCohost();
+  showToast('Kamu dikeluarkan dari co-host','error');
+});
+
+socket.on('chat:message',(data)=>appendChat(data));
+
+socket.on('stream:ended',()=>{
   document.getElementById('loadingOverlay').classList.add('hidden');
   document.getElementById('playOverlay').classList.add('hidden');
   document.getElementById('endedOverlay').classList.remove('hidden');
-  if (pc) { pc.close(); pc = null; }
+  if(pc){pc.close();pc=null}
+  cleanupCohost();
 });
 
-socket.on('error:stream', ({ message }) => {
-  showToast(message, 'error');
-  backToDiscover();
-});
+socket.on('error:stream',({message})=>{showToast(message,'error');backToDiscover()});
+socket.on('connect',()=>loadStreams());
+socket.on('disconnect',()=>showToast('Koneksi terputus...','error'));
 
-socket.on('connect', () => loadStreams());
-socket.on('disconnect', () => showToast('Koneksi terputus...', 'error'));
-
-// ── Init ───────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
 loadStreams();
-setInterval(() => {
-  if (document.getElementById('discoverScreen').classList.contains('active')) loadStreams();
-}, 10000);
+setInterval(()=>{
+  if(document.getElementById('discoverScreen').classList.contains('active')) loadStreams();
+},10000);
 </script>
 </body>
 </html>
