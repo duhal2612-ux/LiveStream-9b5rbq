@@ -77,6 +77,33 @@ html,body{height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',sys
 .watch-container{position:relative;width:100%;height:100%;max-width:calc(100vh*9/16);overflow:hidden;background:#000}
 #remoteVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#000}
 
+/* Grid sync from host — viewer mirror layout */
+#viewerGrid{
+  position:absolute;inset:0;z-index:1;
+  display:grid;gap:2px;background:#111;
+  transition:grid-template-columns .3s ease, grid-template-rows .3s ease;
+  pointer-events:none;
+}
+#viewerGrid.g1{grid-template-columns:1fr;grid-template-rows:1fr}
+#viewerGrid.g2{grid-template-columns:1fr 1fr;grid-template-rows:1fr}
+#viewerGrid.g4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+#viewerGrid.g6{grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr}
+#viewerGrid.g9{grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr}
+.vg-cell{position:relative;overflow:hidden;background:#0a0a0a;display:flex;align-items:center;justify-content:center}
+.vg-cell:first-child video{width:100%;height:100%;object-fit:cover;display:block}
+.vg-cell:not(:first-child){background:rgba(0,0,0,.5)}
+.vg-empty-lbl{font-size:10px;color:rgba(255,255,255,.25);font-weight:600}
+/* Grid indicator badge */
+#gridIndicator{
+  position:absolute;top:58px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.72);backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.15);
+  color:rgba(255,255,255,.8);font-size:11px;font-weight:700;
+  padding:4px 12px;border-radius:20px;z-index:15;
+  opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;
+}
+#gridIndicator.show{opacity:1}
+
 /* Co-host grid: when co-hosting, show local + remote */
 #coGrid{
   position:absolute;inset:0;display:none;
@@ -257,8 +284,16 @@ html,body{height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',sys
 <div class="screen" id="watchScreen">
   <div class="watch-container">
 
-    <!-- Main video (from host) -->
+    <!-- Main video (from host) → only visible when grid = 1 -->
     <video id="remoteVideo" autoplay playsinline muted></video>
+
+    <!-- Viewer grid mirror (synced from host grid layout) -->
+    <div id="viewerGrid" class="g1">
+      <div class="vg-cell" id="vgMain"></div>
+    </div>
+
+    <!-- Grid layout indicator -->
+    <div id="gridIndicator"></div>
 
     <!-- Co-host grid (me + host, bidirectional) -->
     <div id="coGrid">
@@ -466,13 +501,15 @@ async function handleViewerOffer(fromId, offer){
 
   pc.ontrack=e=>{
     const video=document.getElementById('remoteVideo');
-    if(e.streams?.[0]) video.srcObject=e.streams[0];
-    else { const ms=video.srcObject||new MediaStream(); ms.addTrack(e.track); video.srcObject=ms; }
+    const stream = e.streams?.[0] || (() => { const ms=video.srcObject||new MediaStream(); ms.addTrack(e.track); return ms; })();
+    video.srcObject = stream;
     document.getElementById('loadingOverlay').classList.add('hidden');
     video.play().then(()=>{video.muted=false;document.getElementById('playOverlay').classList.add('hidden')})
                .catch(()=>document.getElementById('playOverlay').classList.remove('hidden'));
+    // Sync to viewer grid main cell if active
+    syncVgHostVideo(stream);
     // Also mirror to co-grid remote
-    if(isCohost) document.getElementById('coRemoteVideo').srcObject=video.srcObject;
+    if(isCohost) document.getElementById('coRemoteVideo').srcObject=stream;
   };
 
   pc.onicecandidate=e=>{if(e.candidate)socket.emit('rtc:ice',{targetId:fromId,candidate:e.candidate,label:'viewer'})};
@@ -669,6 +706,66 @@ document.getElementById('wChatScroll').addEventListener('scroll',function(){
 
 // ── Socket Events ─────────────────────────────────────────────────────────────
 socket.on('streams:list',renderStreams);
+
+// ── Grid sync from host ─────────────────────────────────────────────────────
+socket.on('grid:change', ({ gridMode }) => {
+  if (!currentStreamId) return;
+  applyViewerGrid(gridMode);
+});
+
+function applyViewerGrid(n) {
+  const grid = document.getElementById('viewerGrid');
+  const mainVid = document.getElementById('remoteVideo');
+
+  // Set grid class
+  grid.className = 'g' + n;
+
+  // Rebuild cells: first cell always has the remote video, rest are empty placeholders
+  grid.innerHTML = '';
+  const total = n === 2 ? 2 : n === 4 ? 4 : n === 6 ? 6 : n === 9 ? 9 : 1;
+
+  for (let i = 0; i < total; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'vg-cell';
+    if (i === 0) {
+      // Main host video in first cell
+      const vid = document.createElement('video');
+      vid.id = 'vgHostVideo';
+      vid.autoplay = true; vid.playsInline = true; vid.muted = false;
+      if (mainVid.srcObject) {
+        vid.srcObject = mainVid.srcObject;
+        vid.play().catch(()=>{});
+      }
+      vid.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+      cell.appendChild(vid);
+    } else {
+      // Empty placeholder cells (co-hosts not yet joined)
+      const lbl = document.createElement('div');
+      lbl.className = 'vg-empty-lbl';
+      lbl.textContent = 'Co-host ' + i;
+      cell.appendChild(lbl);
+    }
+    grid.appendChild(cell);
+  }
+
+  // Show/hide original remote video (hidden when grid is active)
+  mainVid.style.display = n === 1 ? 'block' : 'none';
+  grid.style.display = n === 1 ? 'none' : 'grid';
+
+  // Show indicator badge
+  const labelMap = { 1:'1 layar', 2:'2 layar', 4:'2×2 grid', 6:'3×2 grid', 9:'3×3 grid' };
+  const ind = document.getElementById('gridIndicator');
+  ind.textContent = '⊞ Host: ' + (labelMap[n] || n + ' layar');
+  ind.classList.add('show');
+  clearTimeout(ind._t);
+  ind._t = setTimeout(() => ind.classList.remove('show'), 2500);
+}
+
+// Keep vgHostVideo in sync when remote stream is set
+function syncVgHostVideo(stream) {
+  const v = document.getElementById('vgHostVideo');
+  if (v && stream) { v.srcObject = stream; v.play().catch(()=>{}); }
+}
 
 socket.on('rtc:offer',({from,offer,label})=>{
   if(label==='viewer') handleViewerOffer(from,offer);

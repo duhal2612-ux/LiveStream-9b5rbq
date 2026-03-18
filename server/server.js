@@ -159,6 +159,15 @@ io.on('connection', (socket) => {
     broadcastStreamList();
   });
 
+  // ── Grid sync: Host → all viewers in room ────────────────────────────────
+  socket.on('grid:change', ({ gridMode }) => {
+    const { streamId, role } = socket.data || {};
+    if (!streamId || role !== 'host') return;
+    // Broadcast to everyone in the room EXCEPT the host
+    socket.to(`stream:${streamId}`).emit('grid:change', { gridMode });
+    console.log(`[GRID] ${streamId} → ${gridMode}`);
+  });
+
   // ── WebRTC: Generic signaling relay ────────────────────────────────────
   socket.on('rtc:offer',  ({ targetId, offer, label })    => relay(targetId, 'rtc:offer',  { from: socket.id, offer, label }));
   socket.on('rtc:answer', ({ targetId, answer, label })   => relay(targetId, 'rtc:answer', { from: socket.id, answer, label }));

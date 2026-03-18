@@ -471,29 +471,62 @@ function toggleMirror() {
 }
 
 async function flipCamera() {
-  facing = facing === 'user' ? 'environment' : 'user';
   if (!localStream) return;
+  // Stop current video track first
+  const oldVideoTrack = localStream.getVideoTracks()[0];
+  if (oldVideoTrack) oldVideoTrack.stop();
+
+  // Toggle facing
+  facing = facing === 'user' ? 'environment' : 'user';
+
+  const tryGetCamera = async (useExact) => {
+    return navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: useExact ? { exact: facing } : facing,
+        width:  { ideal: 480 },
+        height: { ideal: 640 },
+        frameRate: { ideal: 30 }
+      }
+    });
+  };
+
   try {
-    const oldStream = localStream;
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:facing,width:{ideal:720},height:{ideal:1280},frameRate:{ideal:30}},
-      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
-    });
-    localStream = newStream;
-    document.getElementById('localVideo').srcObject = newStream;
-    // Replace tracks in all peer connections
-    const newVideoTrack = newStream.getVideoTracks()[0];
-    viewerPCs.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind==='video');
-      if (sender) sender.replaceTrack(newVideoTrack).catch(console.warn);
-    });
-    cohostPCs.forEach(pc => {
-      const sender = pc.getSenders().find(s => s.track?.kind==='video');
-      if (sender) sender.replaceTrack(newVideoTrack).catch(console.warn);
-    });
-    oldStream.getTracks().forEach(t => t.stop());
-    showToast(facing==='user'?'Kamera depan':'Kamera belakang');
-  } catch(e) { showToast('Gagal balik kamera: '+e.message,'error'); }
+    let newVideoStream;
+    try {
+      newVideoStream = await tryGetCamera(true);  // try exact first
+    } catch {
+      newVideoStream = await tryGetCamera(false); // fallback without exact
+    }
+
+    const newVideoTrack = newVideoStream.getVideoTracks()[0];
+
+    // Hot-swap video track in localStream (keeps existing audio)
+    localStream.removeTrack(oldVideoTrack);
+    localStream.addTrack(newVideoTrack);
+
+    // Refresh video element
+    const lv = document.getElementById('localVideo');
+    lv.srcObject = null;
+    lv.srcObject = localStream;
+    lv.style.transform = mirrored ? 'scaleX(-1)' : '';
+    lv.play().catch(()=>{});
+
+    // Replace video track in all active peer connections without renegotiation
+    const replaceTrackAll = (peerMap) => {
+      peerMap.forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) sender.replaceTrack(newVideoTrack).catch(console.warn);
+      });
+    };
+    replaceTrackAll(viewerPCs);
+    replaceTrackAll(cohostPCs);
+
+    showToast(facing === 'user' ? 'Kamera depan 🤳' : 'Kamera belakang 📷');
+  } catch(e) {
+    showToast('Gagal balik kamera: ' + e.message, 'error');
+    // Revert facing on failure
+    facing = facing === 'user' ? 'environment' : 'user';
+  }
 }
 
 async function toggleFlash() {
@@ -524,6 +557,8 @@ function setGrid(n) {
   document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('active'));
   const btnMap={1:'gb1',2:'gb2',4:'gb4',6:'gb6',9:'gb9'};
   document.getElementById(btnMap[n]||'gb1')?.classList.add('active');
+  // Sync grid layout to all viewers in real-time
+  if (streamId) socket.emit('grid:change', { gridMode: n });
 }
 
 // ── WebRTC: Viewer (host pushes stream to viewer) ──────────────────────────
